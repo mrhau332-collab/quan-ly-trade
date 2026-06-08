@@ -1,0 +1,91 @@
+{
+  "users": [
+    {
+      "id": "1",
+      "name": "Hậu",
+      "email": "mrhau332@gmail.com",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=Hau",
+      "role": "ADMIN",
+      "created_at": "2026-05-01T00:00:00Z"
+    },
+    {
+      "id": "2",
+      "name": "Đức",
+      "email": "duc@tradeguardian.vn",
+      "avatar": "https://api.dicebear.com/7.x/adventurer/svg?seed=Duc",
+      "role": "TRADER",
+      "created_at": "2026-05-01T00:00:00Z"
+    }
+  ],
+  "trading_accounts": [
+    {
+      "id": "acct_2",
+      "name": "TopStep Funded $50k",
+      "account_type": "TopStep",
+      "owner_id": "2",
+      "starting_balance": 50000,
+      "current_balance": 49000,
+      "equity": 48900,
+      "daily_drawdown_limit": 1000,
+      "max_drawdown_limit": 2000,
+      "status": "ACTIVE",
+      "currency": "USD",
+      "created_at": "2026-05-02T00:00:00Z",
+      "purchase_price": 2300000
+    }
+  ],
+  "trades": [],
+  "trade_mistakes": [],
+  "rewards_penalties": [],
+  "accountability_reviews": [],
+  "daily_journals": [],
+  "notifications": [
+    {
+      "id": "not_wkl6fc0_1780905921016",
+      "title": "Điểm thưởng mới!",
+      "message": "Hậu vừa tặng +10 điểm kỷ luật cho Đức. Lý do: g",
+      "type": "success",
+      "read": false,
+      "created_at": "2026-06-08T08:05:21.016Z"
+    },
+    {
+      "id": "not_235az2z_1780905920356",
+      "title": "Điểm thưởng mới!",
+      "message": "Hậu vừa tặng +10 điểm kỷ luật cho Đức. Lý do: g",
+      "type": "success",
+      "read": false,
+      "created_at": "2026-06-08T08:05:20.356Z"
+    },
+    {
+      "id": "not_zja6tjf_1780905914925",
+      "title": "Điểm thưởng mới!",
+      "message": "Hậu vừa tặng +10 điểm kỷ luật cho Hậu. Lý do: fg",
+      "type": "success",
+      "read": false,
+      "created_at": "2026-06-08T08:05:14.925Z"
+    },
+    {
+      "id": "not_1",
+      "title": "Lệnh trade mới được mở",
+      "message": "Đức vừa mở lệnh BUY lướt sóng breakout trên XAUUSD (FMTO Funded $100k)",
+      "type": "info",
+      "read": false,
+      "created_at": "2026-06-07T14:00:00Z"
+    },
+    {
+      "id": "not_2",
+      "title": "Đánh giá giám sát chéo mới",
+      "message": "Hậu vừa đánh giá FAIL lệnh trade #trade_3 của Đức kèm lời nhắc nhở kỷ luật",
+      "type": "warning",
+      "read": true,
+      "created_at": "2026-06-03T20:00:00Z"
+    }
+  ],
+  "regulations": [],
+  "shared_fund": {
+    "balance": 17700000,
+    "currency": "VND",
+    "transactions": [],
+    "contributed_capital": 20000000
+  }
+}

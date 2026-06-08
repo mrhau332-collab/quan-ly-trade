@@ -1,0 +1,170 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Multiple Theme Configurations via CSS variables */
+:root, [data-theme="dark"] {
+  --color-bg: #0b1020;
+  --color-card: #121a2b;
+  --color-border: #1e293b;
+  --color-text: #cbd5e1;
+  --color-title: #ffffff;
+  --color-muted: #64748b;
+  --color-nav: #0b1020;
+  --color-input: #0b1020;
+  --color-accent: #6366f1;
+}
+
+[data-theme="cyber"] {
+  --color-bg: #030303;
+  --color-card: #0a0a0c;
+  --color-border: #10b981;
+  --color-text: #34d399;
+  --color-title: #10b981;
+  --color-muted: #f59e0b;
+  --color-nav: #030303;
+  --color-input: #000000;
+  --color-accent: #f43f5e;
+}
+
+[data-theme="light"] {
+  --color-bg: #f8fafc;
+  --color-card: #ffffff;
+  --color-border: #e2e8f0;
+  --color-text: #334155;
+  --color-title: #0f172a;
+  --color-muted: #64748b;
+  --color-nav: #f1f5f9;
+  --color-input: #ffffff;
+  --color-accent: #2563eb;
+}
+
+[data-theme="cosmic"] {
+  --color-bg: #090514;
+  --color-card: #140d24;
+  --color-border: #3b0764;
+  --color-text: #ebd5ff;
+  --color-title: #ffffff;
+  --color-muted: #a78bfa;
+  --color-nav: #090514;
+  --color-input: #06030f;
+  --color-accent: #a855f7;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* Global Real-time Theme Overrides for existing components without breaking original Tailwind structure */
+body, #main-application-container, #tab-nav-bar, #header-bar, #loading-fallback {
+  background-color: var(--color-bg) !important;
+  color: var(--color-text) !important;
+}
+
+/* Card components background override */
+.bg-\[\#121A2B\], 
+.bg-slate-900\/40, 
+#dashboard-charts-grid > div, 
+#write-journal-card, 
+#view-journals-list > div, 
+#trades-list-table, 
+#kpi-cards-grid > div, 
+[id^="account-card-"],
+#notifications-menu-panel,
+#review-submission-wrapper,
+#leaderboard-rules-wrapper,
+#incentive-submission-wrapper {
+  background-color: var(--color-card) !important;
+}
+
+/* Borders mapping override */
+.border-slate-800, 
+.border-slate-800\/80, 
+.border-slate-800\/60, 
+.border-slate-800\/45, 
+.border-slate-900, 
+.divide-slate-800\/50 > tr, 
+.divider-y > div,
+.border-slate-700,
+table, 
+thead, 
+tr, 
+td, 
+th {
+  border-color: var(--color-border) !important;
+}
+
+/* Inputs, Textareas and Selects overrides */
+input, 
+textarea, 
+select {
+  background-color: var(--color-input) !important;
+  border-color: var(--color-border) !important;
+  color: var(--color-text) !important;
+}
+
+/* Primary text content overrides */
+.text-slate-200, 
+.text-slate-300, 
+td,
+p {
+  color: var(--color-text) !important;
+}
+
+/* High contrast titles overrides */
+.text-white, 
+h1, 
+h2, 
+h3, 
+h4, 
+h5, 
+h6,
+th {
+  color: var(--color-title) !important;
+}
+
+/* Grayed out description text overrides */
+.text-slate-400, 
+.text-slate-500 {
+  color: var(--color-muted) !important;
+}
+
+/* Secondary Button / Interactive styling adjustments */
+.bg-\[\#121A2B\]:hover {
+  background-color: var(--color-border) !important;
+}
+
+/* App primary button overrides to respect chosen theme accent color */
+.bg-indigo-600 {
+  background-color: var(--color-accent) !important;
+}
+.bg-indigo-600:hover {
+  opacity: 0.9;
+}
+.text-indigo-400, .text-[#6366F1] {
+  color: var(--color-accent) !important;
+}
+
+/* Custom scrollbars for a premium trading dashboard appearance */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+

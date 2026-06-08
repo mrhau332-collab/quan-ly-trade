@@ -1,0 +1,6 @@
+{
+  "name": "Trade Guardian",
+  "description": "Hệ thống quản lý, giám sát giao dịch, kỷ luật và AI Mentor phân tích hành vi cho nhóm trader.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
