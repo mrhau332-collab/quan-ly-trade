@@ -94,6 +94,8 @@ export default function App() {
   
   // Auth simulation state
   const [activeUser, setActiveUser] = useState<User | null>(null);
+  const activeUserRef = useRef<User | null>(null);
+  activeUserRef.current = activeUser;
 
   // Custom visual confirm and alert states
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -305,9 +307,10 @@ export default function App() {
 
       // Auto assign and sync active user details
       const savedUserId = localStorage.getItem("tg-active-user-id");
+      const currentActiveUser = activeUserRef.current;
       if (data.users && data.users.length > 0) {
-        if (activeUser) {
-          const freshUser = data.users.find((u: any) => u.id === activeUser.id);
+        if (currentActiveUser) {
+          const freshUser = data.users.find((u: any) => u.id === currentActiveUser.id);
           if (freshUser) {
             setActiveUser(freshUser);
           }
@@ -333,7 +336,7 @@ export default function App() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [activeUser]);
+  }, []);
 
   // Sync journal formulation for date change
   const handleJournalDateChange = (dateVal: string) => {
