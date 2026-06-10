@@ -25,13 +25,15 @@ import {
   TradeMistake,
   Regulation,
   SharedFund,
-  SharedFundTransaction
+  SharedFundTransaction,
+  MarketNews
 } from "./types.js";
 import UserPicker from "./components/UserPicker.tsx";
 import KPICards from "./components/KPICards.tsx";
 import AccountCards from "./components/AccountCards.tsx";
 import Charts from "./components/Charts.tsx";
 import PortfolioHeatmap from "./components/PortfolioHeatmap.tsx";
+import MarketNewsSection from "./components/MarketNewsSection.tsx";
 import {
   Activity,
   Award,
@@ -91,6 +93,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [regulations, setRegulations] = useState<Regulation[]>([]);
   const [sharedFund, setSharedFund] = useState<SharedFund | null>(null);
+  const [marketNews, setMarketNews] = useState<MarketNews[]>([]);
   
   // Auth simulation state
   const [activeUser, setActiveUser] = useState<User | null>(null);
@@ -267,6 +270,20 @@ export default function App() {
   });
 
   const [showAddRegModal, setShowAddRegModal] = useState(false);
+  const [showAddNewsModal, setShowAddNewsModal] = useState(false);
+  const [showEditNewsModal, setShowEditNewsModal] = useState(false);
+  const [selectedNewsToEdit, setSelectedNewsToEdit] = useState<MarketNews | null>(null);
+  
+  const [newsForm, setNewsForm] = useState({
+    title: "",
+    impact: "HIGH" as "HIGH" | "MEDIUM" | "LOW",
+    datetime: new Date().toISOString().slice(0, 16), // YYYY-MM-DDTHH:mm
+    forecast: "",
+    actual: "",
+    previous: "",
+    gold_impact_direction: "VOLATILE" as "UP" | "DOWN" | "VOLATILE" | "NEUTRAL",
+    description: ""
+  });
   const [quickApplyState, setQuickApplyState] = useState<{
     isOpen: boolean;
     reg: Regulation | null;
@@ -304,6 +321,7 @@ export default function App() {
       setNotifications(data.notifications || []);
       setRegulations(data.regulations || []);
       setSharedFund(data.shared_fund || null);
+      setMarketNews(data.market_news || []);
 
       // Auto assign and sync active user details
       const savedUserId = localStorage.getItem("tg-active-user-id");
@@ -464,6 +482,99 @@ export default function App() {
       showCustomAlert("Thành công", "Đóng và lưu trữ vị thế giao dịch thành công!", "success");
     } catch (err: any) {
       showCustomAlert("Thất bại", "Lỗi đóng lệnh: " + err.message, "error");
+    }
+  };
+
+  // Market News Actions
+  const handleNewsSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const isoDatetime = new Date(newsForm.datetime).toISOString();
+
+      const payload = {
+        id: selectedNewsToEdit ? selectedNewsToEdit.id : undefined,
+        title: newsForm.title,
+        impact: newsForm.impact,
+        datetime: isoDatetime,
+        forecast: newsForm.forecast,
+        actual: newsForm.actual,
+        previous: newsForm.previous,
+        gold_impact_direction: newsForm.gold_impact_direction,
+        description: newsForm.description
+      };
+
+      const resp = await fetch("/api/market-news", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.error || "Không thể lưu tin tức.");
+      }
+
+      await fetchDB();
+      setShowAddNewsModal(false);
+      setShowEditNewsModal(false);
+      setNewsForm({
+        title: "",
+        impact: "HIGH",
+        datetime: new Date().toISOString().slice(0, 16),
+        forecast: "",
+        actual: "",
+        previous: "",
+        gold_impact_direction: "VOLATILE",
+        description: ""
+      });
+      setSelectedNewsToEdit(null);
+      showCustomAlert("Thành công", "Lưu tin tức thị trường thành công!", "success");
+    } catch (err: any) {
+      showCustomAlert("Thất bại", "Lỗi lưu tin tức: " + err.message, "error");
+    }
+  };
+
+  const handleDeleteNews = async (id: string) => {
+    showCustomConfirm(
+      "Xác nhận xóa",
+      "Bạn có chắc chắn muốn xóa tin tức thị trường này khỏi lịch?",
+      async () => {
+        try {
+          const resp = await fetch(`/api/market-news/${id}`, {
+            method: "DELETE"
+          });
+
+          if (!resp.ok) {
+            const errData = await resp.json();
+            throw new Error(errData.error || "Không thể xóa tin tức.");
+          }
+
+          await fetchDB();
+          showCustomAlert("Thành công", "Đã xóa tin tức thị trường.", "success");
+        } catch (err: any) {
+          showCustomAlert("Thất bại", "Lỗi xóa tin tức: " + err.message, "error");
+        }
+      }
+    );
+  };
+
+  const handleQuickUpdateActual = async (id: string, actualValue: string) => {
+    try {
+      const resp = await fetch(`/api/market-news/${id}/actual`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actual: actualValue })
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.error || "Không thể cập nhật chỉ số thực tế.");
+      }
+
+      await fetchDB();
+      showCustomAlert("Thành công", "Đã cập nhật chỉ số thực tế.", "success");
+    } catch (err: any) {
+      showCustomAlert("Thất bại", "Lỗi cập nhật: " + err.message, "error");
     }
   };
 
@@ -1474,6 +1585,42 @@ export default function App() {
         {/* VIEW 1: DASHBOARD */}
         {activeTab === "dashboard" && (
           <div className="space-y-6" id="dashboard-tab-view">
+            {/* Market News Section */}
+            <MarketNewsSection
+              news={marketNews}
+              activeUser={activeUser}
+              onAddClick={() => {
+                setNewsForm({
+                  title: "",
+                  impact: "HIGH",
+                  datetime: new Date().toISOString().slice(0, 16),
+                  forecast: "",
+                  actual: "",
+                  previous: "",
+                  gold_impact_direction: "VOLATILE",
+                  description: ""
+                });
+                setSelectedNewsToEdit(null);
+                setShowAddNewsModal(true);
+              }}
+              onEditClick={(item) => {
+                setSelectedNewsToEdit(item);
+                setNewsForm({
+                  title: item.title,
+                  impact: item.impact,
+                  datetime: new Date(item.datetime).toISOString().slice(0, 16),
+                  forecast: item.forecast || "",
+                  actual: item.actual || "",
+                  previous: item.previous || "",
+                  gold_impact_direction: item.gold_impact_direction,
+                  description: item.description || ""
+                });
+                setShowEditNewsModal(true);
+              }}
+              onDeleteClick={handleDeleteNews}
+              onQuickUpdateActual={handleQuickUpdateActual}
+            />
+
             {/* KPI Cards Component */}
             {activeUser && (
               <KPICards
@@ -1566,6 +1713,8 @@ export default function App() {
                 <PortfolioHeatmap trades={trades} />
               </div>
             </div>
+
+
           </div>
         )}
 
@@ -2728,6 +2877,149 @@ export default function App() {
               </div>
 
             </div>
+
+            {/* POPUP MODAL FOR ADDING/EDITING MARKET NEWS */}
+            {(showAddNewsModal || showEditNewsModal) && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scaleIn">
+                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
+                      <Calendar className="text-rose-500 w-4.5 h-4.5" /> 
+                      {showEditNewsModal ? "Cập nhật sự kiện vĩ mô" : "Tạo sự kiện vĩ mô mới"}
+                    </h3>
+                    <button 
+                      onClick={() => {
+                        setShowAddNewsModal(false);
+                        setShowEditNewsModal(false);
+                        setSelectedNewsToEdit(null);
+                      }}
+                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleNewsSubmit} className="p-6 space-y-4 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Tên sự kiện / Tin tức</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ví dụ: Chỉ số CPI lõi hàng tháng (Mỹ)..."
+                          value={newsForm.title}
+                          onChange={(e) => setNewsForm({ ...newsForm, title: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Thời gian công bố (Ngày & Giờ)</label>
+                        <input 
+                          type="datetime-local" 
+                          value={newsForm.datetime}
+                          onChange={(e) => setNewsForm({ ...newsForm, datetime: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Mức độ ảnh hưởng</label>
+                        <select
+                          value={newsForm.impact}
+                          onChange={(e) => setNewsForm({ ...newsForm, impact: e.target.value as any })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
+                        >
+                          <option value="HIGH">🔴 Tác động mạnh (HIGH)</option>
+                          <option value="MEDIUM">🟡 Tác động vừa (MEDIUM)</option>
+                          <option value="LOW">⚪ Tác động yếu (LOW)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Hướng ảnh hưởng giá Vàng</label>
+                        <select
+                          value={newsForm.gold_impact_direction}
+                          onChange={(e) => setNewsForm({ ...newsForm, gold_impact_direction: e.target.value as any })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
+                        >
+                          <option value="VOLATILE">⚡ Biến động hai chiều mạnh</option>
+                          <option value="UP">📈 Vàng tăng giá (USD giảm)</option>
+                          <option value="DOWN">📉 Vàng giảm giá (USD tăng)</option>
+                          <option value="NEUTRAL">⚪ Ít tác động trực tiếp</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Kỳ trước</label>
+                        <input 
+                          type="text" 
+                          placeholder="3.5%"
+                          value={newsForm.previous}
+                          onChange={(e) => setNewsForm({ ...newsForm, previous: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Dự báo</label>
+                        <input 
+                          type="text" 
+                          placeholder="3.4%"
+                          value={newsForm.forecast}
+                          onChange={(e) => setNewsForm({ ...newsForm, forecast: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Thực tế</label>
+                        <input 
+                          type="text" 
+                          placeholder="Bỏ trống nếu chờ..."
+                          value={newsForm.actual}
+                          onChange={(e) => setNewsForm({ ...newsForm, actual: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Phân tích & Nhận định ảnh hưởng giá Vàng</label>
+                      <textarea
+                        placeholder="Nếu CPI cao hơn dự báo (USD tăng) -> Giá vàng sẽ giảm. Nếu thấp hơn dự báo -> Vàng bay cao..."
+                        value={newsForm.description}
+                        onChange={(e) => setNewsForm({ ...newsForm, description: e.target.value })}
+                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 h-20 leading-relaxed"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddNewsModal(false);
+                          setShowEditNewsModal(false);
+                          setSelectedNewsToEdit(null);
+                        }}
+                        className="px-4 py-2 border border-slate-800 text-slate-300 rounded-lg hover:bg-slate-800 cursor-pointer"
+                      >
+                        Hủy bỏ
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-lg shadow-indigo-600/10 cursor-pointer"
+                      >
+                        {showEditNewsModal ? "Cập nhật sự kiện" : "Tạo sự kiện"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* POPUP MODAL FOR ADDING USER-DEFINED REGULATIONS */}
             {showAddRegModal && (

@@ -25,7 +25,8 @@ import {
   RewardPenalty,
   AccountabilityReview,
   DailyJournal,
-  AppNotification
+  AppNotification,
+  MarketNews
 } from "./src/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,11 +34,54 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
-const DB_PATH = path.join(process.cwd(), "db.json");
+const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), "db.json");
 
 // Middleware to parse large JSON requests (for base64 screenshots)
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+function getDefaultMarketNews(): MarketNews[] {
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0]; // YYYY-MM-DD
+  return [
+    {
+      id: "news_1",
+      title: "Chỉ số giá tiêu dùng CPI Mỹ (Tháng 5)",
+      impact: "HIGH",
+      datetime: `${todayStr}T19:30:00.000Z`,
+      forecast: "3.4%",
+      actual: "",
+      previous: "3.5%",
+      gold_impact_direction: "VOLATILE",
+      description: "Chỉ số đo lường lạm phát cốt lõi của Mỹ. Nếu CPI cao hơn dự báo (USD tăng), giá vàng có xu hướng GIẢM mạnh. Ngược lại, nếu CPI thấp hơn dự báo (USD giảm), giá vàng sẽ TĂNG mạnh.",
+      created_at: new Date().toISOString()
+    },
+    {
+      id: "news_2",
+      title: "Quyết định Lãi suất Liên bang FOMC & Họp báo FED",
+      impact: "HIGH",
+      datetime: `${todayStr}T21:00:00.000Z`,
+      forecast: "5.50%",
+      actual: "",
+      previous: "5.50%",
+      gold_impact_direction: "VOLATILE",
+      description: "Sự kiện cực kỳ quan trọng ảnh hưởng đến dòng tiền toàn cầu. Nếu FED giữ nguyên hoặc đưa ra quan điểm diều hâu (hawkish), giá vàng sẽ chịu áp lực giảm. Nếu FED phát đi tín hiệu nới lỏng hoặc ôn hòa (dovish), giá vàng sẽ bay cao.",
+      created_at: new Date().toISOString()
+    },
+    {
+      id: "news_3",
+      title: "Số đơn xin trợ cấp thất nghiệp lần đầu của Mỹ",
+      impact: "MEDIUM",
+      datetime: `${todayStr}T15:30:00.000Z`,
+      forecast: "220K",
+      actual: "",
+      previous: "215K",
+      gold_impact_direction: "NEUTRAL",
+      description: "Đo lường số lượng người nộp đơn xin trợ cấp thất nghiệp. Số đơn tăng vượt kỳ vọng cho thấy thị trường lao động suy yếu, hỗ trợ giá vàng tăng do USD giảm.",
+      created_at: new Date().toISOString()
+    }
+  ];
+}
 
 function getDefaultRegulations() {
   return [
@@ -166,6 +210,12 @@ async function readDB() {
       modified = true;
     }
 
+    // Ensure market_news array exists
+    if (!db.market_news || db.market_news.length === 0) {
+      db.market_news = getDefaultMarketNews();
+      modified = true;
+    }
+
     // Ensure shared_fund exists
     if (!db.shared_fund) {
       db.shared_fund = {
@@ -204,53 +254,87 @@ async function readDB() {
     calculateSharedFund(db);
 
     if (modified) {
-      await fs.writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf-8");
+      await writeDB(db);
     }
 
     return db;
   } catch (err) {
-    console.error("Error reading database file, using fallback key structure", err);
-    return {
-      users: [],
-      trading_accounts: [],
-      trades: [],
-      trade_mistakes: [],
-      rewards_penalties: [],
-      accountability_reviews: [],
-      daily_journals: [],
-      notifications: [],
-      regulations: getDefaultRegulations(),
-      shared_fund: {
-        balance: 10000000,
-        currency: "VND",
-        transactions: [
-          {
-            id: "tx_1",
-            amount: 25000000,
-            type: "INFLOW",
-            purpose: "Vốn đóng góp ban đầu",
-            description: "Hậu đóng góp vốn ban đầu để khởi tạo quỹ chung",
-            user_id: "1",
-            created_at: "2026-05-01T00:00:00Z"
-          },
-          {
-            id: "tx_2",
-            amount: 15000000,
-            type: "OUTFLOW",
-            purpose: "Chi mua tài khoản thử thách TopStep $50k",
-            description: "Mua tài khoản thử thách TopStep $50k cho Đức thi quỹ dưới sự giám sát chéo",
-            user_id: "1",
-            created_at: "2026-05-02T10:00:00Z"
+    try {
+      await fs.access(DB_PATH);
+      console.error("CRITICAL: Database file exists but failed to read/parse:", err);
+      throw err; // throw to let the API request fail, protecting database from being wiped with empty fallback
+    } catch (accessErr: any) {
+      if (accessErr.code === "ENOENT") {
+        console.log("Database file does not exist, initializing default structure...");
+        const defaultDB = {
+          users: [
+            {
+              id: "1",
+              name: "Hậu",
+              email: "mrhau332@gmail.com",
+              avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Hau",
+              role: UserRole.ADMIN,
+              created_at: "2026-05-01T00:00:00Z"
+            },
+            {
+              id: "2",
+              name: "Đức",
+              email: "duc@tradeguardian.vn",
+              avatar: "https://api.dicebear.com/7.x/adventurer/svg?seed=Duc",
+              role: UserRole.TRADER,
+              created_at: "2026-05-01T00:00:00Z"
+            }
+          ],
+          trading_accounts: [],
+          trades: [],
+          trade_mistakes: [],
+          rewards_penalties: [],
+          accountability_reviews: [],
+          daily_journals: [],
+          notifications: [],
+          regulations: getDefaultRegulations(),
+          market_news: getDefaultMarketNews(),
+          shared_fund: {
+            balance: 10000000,
+            currency: "VND",
+            contributed_capital: 20000000,
+            transactions: [
+              {
+                id: "tx_1",
+                amount: 25000000,
+                type: "INFLOW",
+                purpose: "Vốn đóng góp ban đầu",
+                description: "Hậu đóng góp vốn ban đầu để khởi tạo quỹ chung",
+                user_id: "1",
+                created_at: "2026-05-01T00:00:00Z"
+              },
+              {
+                id: "tx_2",
+                amount: 15000000,
+                type: "OUTFLOW",
+                purpose: "Chi mua tài khoản thử thách TopStep $50k",
+                description: "Mua tài khoản thử thách TopStep $50k cho Đức thi quỹ dưới sự giám sát chéo",
+                user_id: "1",
+                created_at: "2026-05-02T10:00:00Z"
+              }
+            ]
           }
-        ]
+        };
+        await writeDB(defaultDB);
+        return defaultDB;
       }
-    };
+      throw err;
+    }
   }
 }
 
-// Helper to write database
+// Helper to write database atomically
 async function writeDB(data: any) {
-  await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), "utf-8");
+  const dir = path.dirname(DB_PATH);
+  await fs.mkdir(dir, { recursive: true });
+  const tmpPath = DB_PATH + ".tmp";
+  await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+  await fs.rename(tmpPath, DB_PATH);
 }
 
 // Helper to generate IDs
@@ -1241,6 +1325,105 @@ app.delete("/api/shared-fund/transactions/:id", async (req, res) => {
     res.json(db.shared_fund);
   } catch (error: any) {
     res.status(500).json({ error: "Failed to delete shared-fund transaction: " + error.message });
+  }
+});
+
+// 11. Market News endpoints
+
+// 11.1 Create or Update a Market News event
+app.post("/api/market-news", async (req, res) => {
+  try {
+    const db = await readDB();
+    const { id, title, impact, datetime, forecast, actual, previous, gold_impact_direction, description } = req.body;
+
+    if (!title || !impact || !datetime || !gold_impact_direction) {
+      return res.status(400).json({ error: "Missing required fields (title, impact, datetime, gold_impact_direction) to save news." });
+    }
+
+    if (!db.market_news) {
+      db.market_news = [];
+    }
+
+    if (id) {
+      // Edit mode
+      const idx = db.market_news.findIndex((n: any) => n.id === id);
+      if (idx !== -1) {
+        db.market_news[idx] = {
+          ...db.market_news[idx],
+          title,
+          impact,
+          datetime,
+          forecast: forecast || "",
+          actual: actual || "",
+          previous: previous || "",
+          gold_impact_direction,
+          description: description || ""
+        };
+        await writeDB(db);
+        return res.json(db.market_news[idx]);
+      }
+    }
+
+    // Add mode
+    const newNews: MarketNews = {
+      id: "news_" + generateUUID(),
+      title,
+      impact,
+      datetime,
+      forecast: forecast || "",
+      actual: actual || "",
+      previous: previous || "",
+      gold_impact_direction,
+      description: description || "",
+      created_at: new Date().toISOString()
+    };
+    db.market_news.push(newNews);
+    await writeDB(db);
+    res.json(newNews);
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to save market news: " + error.message });
+  }
+});
+
+// 11.2 Quick update actual value
+app.put("/api/market-news/:id/actual", async (req, res) => {
+  try {
+    const db = await readDB();
+    const newsId = req.params.id;
+    const { actual } = req.body;
+
+    if (!db.market_news) {
+      db.market_news = [];
+    }
+
+    const idx = db.market_news.findIndex((n: any) => n.id === newsId);
+    if (idx === -1) {
+      return res.status(404).json({ error: "News event not found." });
+    }
+
+    db.market_news[idx].actual = actual || "";
+    await writeDB(db);
+    res.json(db.market_news[idx]);
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to update actual value: " + error.message });
+  }
+});
+
+// 11.3 Delete a Market News event
+app.delete("/api/market-news/:id", async (req, res) => {
+  try {
+    const db = await readDB();
+    const newsId = req.params.id;
+
+    if (!db.market_news) {
+      db.market_news = [];
+    }
+
+    db.market_news = db.market_news.filter((n: any) => n.id !== newsId);
+    await writeDB(db);
+    res.json({ success: true, message: "Đã xóa tin tức thị trường thành công." });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to delete market news: " + error.message });
   }
 });
 

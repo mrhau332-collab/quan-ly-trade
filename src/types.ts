@@ -200,3 +200,17 @@ export interface SharedFund {
   transactions: SharedFundTransaction[];
 }
 
+export interface MarketNews {
+  id: string;
+  title: string;
+  impact: "HIGH" | "MEDIUM" | "LOW";
+  datetime: string; // ISO String
+  forecast?: string;
+  actual?: string;
+  previous?: string;
+  gold_impact_direction: "UP" | "DOWN" | "VOLATILE" | "NEUTRAL";
+  description: string;
+  created_at: string;
+}
+
+

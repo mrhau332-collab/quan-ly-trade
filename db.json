@@ -81,11 +81,130 @@
       "created_at": "2026-06-03T20:00:00Z"
     }
   ],
-  "regulations": [],
+  "regulations": [
+    {
+      "id": "reg_1",
+      "title": "Quên Stop Loss (No SL)",
+      "type": "PENALTY",
+      "amount": 50000,
+      "description": "Mở vị thế giao dịch mà không đặt cắt lỗ Stop Loss bảo vệ tài khoản ngay từ đầu.",
+      "created_at": "2026-06-10T03:27:39.824Z"
+    },
+    {
+      "id": "reg_2",
+      "title": "Trả thù thị trường (Revenge trade)",
+      "type": "PENALTY",
+      "amount": 300000,
+      "description": "Liên tiếp nhồi thêm lệnh khống lồ ngay sau khi vừa bị dính SL nhằm gỡ lỗ nhanh trong trạng thái mất bình tĩnh.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_3",
+      "title": "Tâm lý đuổi đỉnh (FOMO)",
+      "type": "PENALTY",
+      "amount": 50000,
+      "description": "Tham lam rượt đuổi theo giá bất chấp các tín hiệu kỹ thuật hay tín hiệu nến chưa chuẩn chỉ.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_4",
+      "title": "Dời vị thế Stop Loss bất quy tắc",
+      "type": "PENALTY",
+      "amount": 50000,
+      "description": "Nới rộng khoảng SL ra xa hơn để gồng khoản lỗ ròng đang gia tăng trái với nguyên tắc quản trị rủi ro lúc lập kế hoạch.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_5",
+      "title": "Overtrading (Giao dịch quá tay)",
+      "type": "PENALTY",
+      "amount": 50000,
+      "description": "Giao dịch vượt quá 5 lệnh riêng biệt trong ngày hoặc mở tổng khối lượng lót quá mức quy chuẩn của nhóm.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_6",
+      "title": "Trốn viết nhật ký ngày",
+      "type": "PENALTY",
+      "amount": 50000,
+      "description": "Không hoàn thành việc tổng kết nhật ký giao dịch của ngày hôm đó.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_7",
+      "title": "Ghi chép Nhật ký ngày đầy đủ",
+      "type": "REWARD",
+      "amount": 10000,
+      "description": "Cập nhật đầy đủ suy nghĩ, bài học và cảm xúc ngày giao dịch.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_8",
+      "title": "Tuân thủ đúng tuyệt đối trade plan",
+      "type": "REWARD",
+      "amount": 20000,
+      "description": "Thực thi chuẩn chỉ kế hoạch giao dịch chi tiết đề ra ban sáng.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_9",
+      "title": "Một tuần kỷ luật giao dịch tuyệt đối",
+      "type": "REWARD",
+      "amount": 100000,
+      "description": "Không dính bất cứ sai phạm hành vi nào trong suốt tuần giao dịch.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    },
+    {
+      "id": "reg_10",
+      "title": "Tuần giao dịch hoàn hảo (Perfect Week)",
+      "type": "REWARD",
+      "amount": 200000,
+      "description": "Đạt chỉ tiêu về mặt lợi nhuận mục tiêu, đồng thời duy trì tỷ lệ tuân thủ kỷ luật và kiểm soát tâm lý ở mức cao nhất.",
+      "created_at": "2026-06-10T03:27:39.827Z"
+    }
+  ],
   "shared_fund": {
     "balance": 17700000,
     "currency": "VND",
     "transactions": [],
     "contributed_capital": 20000000
-  }
+  },
+  "market_news": [
+    {
+      "id": "news_1",
+      "title": "Chỉ số giá tiêu dùng CPI Mỹ (Tháng 5)",
+      "impact": "HIGH",
+      "datetime": "2026-06-10T19:30:00.000Z",
+      "forecast": "3.4%",
+      "actual": "",
+      "previous": "3.5%",
+      "gold_impact_direction": "VOLATILE",
+      "description": "Chỉ số đo lường lạm phát cốt lõi của Mỹ. Nếu CPI cao hơn dự báo (USD tăng), giá vàng có xu hướng GIẢM mạnh. Ngược lại, nếu CPI thấp hơn dự báo (USD giảm), giá vàng sẽ TĂNG mạnh.",
+      "created_at": "2026-06-10T03:27:39.828Z"
+    },
+    {
+      "id": "news_2",
+      "title": "Quyết định Lãi suất Liên bang FOMC & Họp báo FED",
+      "impact": "HIGH",
+      "datetime": "2026-06-10T21:00:00.000Z",
+      "forecast": "5.50%",
+      "actual": "",
+      "previous": "5.50%",
+      "gold_impact_direction": "VOLATILE",
+      "description": "Sự kiện cực kỳ quan trọng ảnh hưởng đến dòng tiền toàn cầu. Nếu FED giữ nguyên hoặc đưa ra quan điểm diều hâu (hawkish), giá vàng sẽ chịu áp lực giảm. Nếu FED phát đi tín hiệu nới lỏng hoặc ôn hòa (dovish), giá vàng sẽ bay cao.",
+      "created_at": "2026-06-10T03:27:39.828Z"
+    },
+    {
+      "id": "news_3",
+      "title": "Số đơn xin trợ cấp thất nghiệp lần đầu của Mỹ",
+      "impact": "MEDIUM",
+      "datetime": "2026-06-10T15:30:00.000Z",
+      "forecast": "220K",
+      "actual": "",
+      "previous": "215K",
+      "gold_impact_direction": "NEUTRAL",
+      "description": "Đo lường số lượng người nộp đơn xin trợ cấp thất nghiệp. Số đơn tăng vượt kỳ vọng cho thấy thị trường lao động suy yếu, hỗ trợ giá vàng tăng do USD giảm.",
+      "created_at": "2026-06-10T03:27:39.828Z"
+    }
+  ]
 }
