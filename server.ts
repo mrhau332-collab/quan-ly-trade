@@ -83,6 +83,100 @@ function getDefaultMarketNews(): MarketNews[] {
   ];
 }
 
+let lastSyncTime = 0;
+let lastSyncResult = { added: 0, updated: 0 };
+
+async function syncMarketNewsFromForexFactory(force: boolean = false) {
+  const now = Date.now();
+  // 10 minutes cache/throttle to avoid Forex Factory IP bans
+  if (!force && now - lastSyncTime < 10 * 60 * 1000 && lastSyncTime > 0) {
+    console.log("Forex Factory sync skipped (throttled). Returning cached results.");
+    return { ...lastSyncResult, throttled: true };
+  }
+
+  console.log("Synchronizing market news from Forex Factory...");
+  try {
+    const response = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json");
+    if (!response.ok) {
+      throw new Error(`Failed to fetch from faireconomy.media: ${response.statusText}`);
+    }
+
+    const feedData = (await response.json()) as any[];
+    if (!Array.isArray(feedData)) {
+      throw new Error("Invalid response format from faireconomy.media, expected array");
+    }
+
+    const db = await readDB();
+    if (!db.market_news) {
+      db.market_news = [];
+    }
+
+    let added = 0;
+    let updated = 0;
+
+    for (const feedItem of feedData) {
+      // Filter: currency must be USD, EUR, GBP, or All
+      const country = feedItem.country ? feedItem.country.trim() : "";
+      if (country !== "USD" && country !== "EUR" && country !== "GBP" && country !== "All") {
+        continue;
+      }
+
+      // Filter: impact must be High or Medium
+      const impactStr = feedItem.impact ? feedItem.impact.trim() : "";
+      if (impactStr !== "High" && impactStr !== "Medium") {
+        continue;
+      }
+
+      const title = country !== "All" ? `[${country}] ${feedItem.title}` : feedItem.title;
+      const datetime = new Date(feedItem.date).toISOString();
+
+      const existingIdx = db.market_news.findIndex(
+        (n: any) => n.title === title && n.datetime === datetime
+      );
+
+      if (existingIdx !== -1) {
+        const old = db.market_news[existingIdx];
+        db.market_news[existingIdx] = {
+          ...old,
+          forecast: feedItem.forecast || old.forecast || "",
+          previous: feedItem.previous || old.previous || "",
+          impact: impactStr.toUpperCase() as any,
+          // Keep user-entered actual/direction/description
+          actual: old.actual || "",
+          gold_impact_direction: old.gold_impact_direction || (country === "USD" && impactStr === "High" ? "VOLATILE" : "NEUTRAL"),
+          description: old.description || "Tin tức vĩ mô tự động cập nhật từ Forex Factory."
+        };
+        updated++;
+      } else {
+        const impact = impactStr.toUpperCase();
+        const gold_impact_direction = (country === "USD" && impact === "HIGH") ? "VOLATILE" : "NEUTRAL";
+        db.market_news.push({
+          id: "news_" + generateUUID(),
+          title,
+          impact: impact as any,
+          datetime,
+          forecast: feedItem.forecast || "",
+          actual: "",
+          previous: feedItem.previous || "",
+          gold_impact_direction: gold_impact_direction as any,
+          description: "Tin tức vĩ mô tự động cập nhật từ Forex Factory.",
+          created_at: new Date().toISOString()
+        });
+        added++;
+      }
+    }
+
+    await writeDB(db);
+    lastSyncTime = now;
+    lastSyncResult = { added, updated };
+    console.log(`Forex Factory sync completed: Added ${added}, Updated ${updated}`);
+    return { added, updated, throttled: false };
+  } catch (error: any) {
+    console.error("Error syncing news from Forex Factory:", error);
+    return { added: 0, updated: 0, error: error.message };
+  }
+}
+
 function getDefaultRegulations() {
   return [
     {
@@ -214,6 +308,8 @@ async function readDB() {
     if (!db.market_news || db.market_news.length === 0) {
       db.market_news = getDefaultMarketNews();
       modified = true;
+      // Trigger news synchronization immediately in background to populate real data
+      setTimeout(() => syncMarketNewsFromForexFactory(true), 0);
     }
 
     // Ensure shared_fund exists
@@ -1427,11 +1523,45 @@ app.delete("/api/market-news/:id", async (req, res) => {
   }
 });
 
+let lastManualSyncTime = 0;
+
+// 11.4 Sync economic news from Forex Factory (Faireconomy JSON)
+app.post("/api/market-news/sync", async (req, res) => {
+  try {
+    const now = Date.now();
+    // 30 seconds rate-limit for manual sync to prevent spamming
+    if (now - lastManualSyncTime < 30 * 1000) {
+      return res.json({ 
+        added: 0, 
+        updated: 0, 
+        throttled: true, 
+        message: "Bạn đang thao tác quá nhanh. Vui lòng thử lại sau 30 giây." 
+      });
+    }
+    
+    const result = await syncMarketNewsFromForexFactory(true);
+    if (!result.error) {
+      lastManualSyncTime = now;
+    }
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: "Thất bại khi đồng bộ: " + error.message });
+  }
+});
+
 /**
  * ----------------- END OF API -----------------
  */
 
 async function startServer() {
+  // Sync news on startup
+  syncMarketNewsFromForexFactory(true);
+
+  // Set periodic background sync every 1 hour (3600000 ms)
+  setInterval(() => {
+    syncMarketNewsFromForexFactory();
+  }, 1 * 60 * 60 * 1000);
+
   // Vite Middleware Setup
   if (process.env.NODE_ENV !== "production") {
     console.log("Starting server in development mode with Vite HMR middleware...");

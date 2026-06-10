@@ -18,7 +18,8 @@ import {
   Zap, 
   Minus,
   MessageSquareCode,
-  FlameKindling
+  FlameKindling,
+  RotateCw
 } from "lucide-react";
 
 interface MarketNewsSectionProps {
@@ -28,6 +29,8 @@ interface MarketNewsSectionProps {
   onEditClick: (item: MarketNews) => void;
   onDeleteClick: (id: string) => void;
   onQuickUpdateActual: (id: string, actualValue: string) => Promise<void>;
+  onSyncClick: () => Promise<void>;
+  isSyncing: boolean;
 }
 
 export default function MarketNewsSection({
@@ -36,7 +39,9 @@ export default function MarketNewsSection({
   onAddClick,
   onEditClick,
   onDeleteClick,
-  onQuickUpdateActual
+  onQuickUpdateActual,
+  onSyncClick,
+  isSyncing
 }: MarketNewsSectionProps) {
   const [filter, setFilter] = useState<"all" | "today" | "week" | "high">("all");
   const [editingActualId, setEditingActualId] = useState<string | null>(null);
@@ -226,6 +231,18 @@ export default function MarketNewsSection({
               Tác động mạnh 🔥
             </button>
           </div>
+
+          {/* Sync News Button */}
+          <button
+            onClick={onSyncClick}
+            disabled={isSyncing}
+            className={`px-3 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:opacity-50 text-white font-semibold text-xs rounded-lg flex items-center gap-1 border border-slate-700/60 shadow-md transition-all cursor-pointer ${
+              isSyncing ? "opacity-75 cursor-not-allowed" : ""
+            }`}
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin" : ""}`} />
+            {isSyncing ? "Đang đồng bộ..." : "Đồng bộ Forex Factory"}
+          </button>
 
           {/* Add News Button */}
           <button

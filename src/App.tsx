@@ -135,6 +135,7 @@ export default function App() {
   // App loading & processing states
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [activeTab, setActiveTab] = useState<"dashboard" | "trade-journal" | "daily-journal" | "accountability" | "leaderboard" | "notifications">("dashboard");
   const [isEditingCapital, setIsEditingCapital] = useState(false);
   const [tempCapital, setTempCapital] = useState("");
@@ -575,6 +576,33 @@ export default function App() {
       showCustomAlert("Thành công", "Đã cập nhật chỉ số thực tế.", "success");
     } catch (err: any) {
       showCustomAlert("Thất bại", "Lỗi cập nhật: " + err.message, "error");
+    }
+  };
+
+  const handleSyncNews = async () => {
+    setIsSyncing(true);
+    try {
+      const resp = await fetch("/api/market-news/sync", {
+        method: "POST"
+      });
+      if (!resp.ok) {
+        throw new Error("Không thể đồng bộ tin tức.");
+      }
+      const data = await resp.json();
+      if (data.throttled) {
+        showCustomAlert("Thông báo", data.message || "Bạn đang thao tác quá nhanh, vui lòng thử lại sau.", "info");
+      } else {
+        await fetchDB();
+        showCustomAlert(
+          "Thành công",
+          `Đã đồng bộ tin tức Forex Factory! Thêm mới: ${data.added || 0}, Cập nhật: ${data.updated || 0}`,
+          "success"
+        );
+      }
+    } catch (err: any) {
+      showCustomAlert("Thất bại", "Lỗi đồng bộ: " + err.message, "error");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -1619,6 +1647,8 @@ export default function App() {
               }}
               onDeleteClick={handleDeleteNews}
               onQuickUpdateActual={handleQuickUpdateActual}
+              onSyncClick={handleSyncNews}
+              isSyncing={isSyncing}
             />
 
             {/* KPI Cards Component */}
