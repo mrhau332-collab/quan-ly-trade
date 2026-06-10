@@ -3139,542 +3139,6 @@ export default function App() {
 
             </div>
 
-            {/* POPUP MODAL FOR IMPORTING TRADES FROM CSV */}
-            {showImportTradesModal && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-scaleIn">
-                  {/* Modal Header */}
-                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
-                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
-                      <RefreshCw className="text-indigo-500 w-4.5 h-4.5" />
-                      Nhập lịch sử giao dịch hàng loạt từ tệp CSV
-                    </h3>
-                    <button 
-                      onClick={() => {
-                        setShowImportTradesModal(false);
-                        setCsvFileText("");
-                        setCsvFileName("");
-                        setCsvHeaders([]);
-                        setRawRows([]);
-                      }}
-                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* Modal Body */}
-                  <form onSubmit={handleCSVImportSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 text-xs flex flex-col">
-                    {/* Setup step 1: File upload & Account select */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Account selection */}
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Chọn tài khoản nhận dữ liệu</label>
-                        <select
-                          value={importAccountId}
-                          onChange={(e) => setImportAccountId(e.target.value)}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2.5 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
-                          required
-                        >
-                          <option value="">-- Chọn tài khoản nhận lịch sử --</option>
-                          {accounts.map(a => (
-                            <option key={a.id} value={a.id}>
-                              {a.name} ({a.account_type}) - Số dư: {a.currency === "VND" ? `${a.current_balance.toLocaleString("vi-VN")}₫` : `$${a.current_balance}`}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* File upload box */}
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Tải lên tệp CSV lịch sử (.csv)</label>
-                        <div className="relative border border-dashed border-slate-800 hover:border-indigo-500/60 rounded-lg px-4 py-2.5 bg-[#0B1020] flex items-center gap-3 cursor-pointer group transition-all">
-                          <input
-                            type="file"
-                            accept=".csv"
-                            onChange={handleCSVUpload}
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                          />
-                          <span className="p-1.5 bg-indigo-500/10 rounded-md text-indigo-400 group-hover:bg-indigo-500/20 transition-all font-sans">
-                            📁
-                          </span>
-                          <span className="text-[11px] text-slate-300 font-medium truncate">
-                            {csvFileName || "Chọn tệp CSV từ máy tính của bạn..."}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Setup step 2: Column mapping */}
-                    {csvHeaders.length > 0 && (
-                      <div className="bg-[#0B1020] border border-slate-800 rounded-xl p-5 space-y-4">
-                        <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                          <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest">Thiết lập ánh xạ cột (Column Mapping)</h4>
-                          <span className="text-[10px] text-slate-500 italic">Hệ thống đã tự động quét và khớp các cột tương thích. Bạn có thể chỉnh sửa lại.</span>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                          {[
-                            { key: "symbol", label: "Cột Symbol (Cặp tiền/Vàng)" },
-                            { key: "direction", label: "Cột Hướng (BUY/SELL)" },
-                            { key: "entry_price", label: "Cột Giá vào (Entry Price)" },
-                            { key: "stop_loss", label: "Cột Stop Loss (S/L)" },
-                            { key: "take_profit", label: "Cột Take Profit (T/P)" },
-                            { key: "profit_loss", label: "Cột Lợi Nhuận (Profit)" },
-                            { key: "opened_at", label: "Cột Ngày mở (Open Time)" },
-                            { key: "closed_at", label: "Cột Ngày đóng (Close Time)" }
-                          ].map(col => (
-                            <div key={col.key}>
-                              <label className="text-[9.5px] font-bold text-slate-400 block mb-1 truncate">{col.label}</label>
-                              <select
-                                value={(columnMapping as any)[col.key]}
-                                onChange={(e) => setColumnMapping({ ...columnMapping, [col.key]: e.target.value })}
-                                className="w-full bg-slate-900 border border-slate-800 px-2 py-1.5 rounded text-slate-200 outline-none text-[11px] focus:border-indigo-500 font-sans"
-                              >
-                                <option value="">-- Không ánh xạ --</option>
-                                {csvHeaders.map(h => (
-                                  <option key={h} value={h}>{h}</option>
-                                ))}
-                              </select>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Setup step 3: Preview Table */}
-                    {rawRows.length > 0 && (
-                      <div className="flex-1 flex flex-col min-h-[250px] bg-[#0B1020] border border-slate-800 rounded-xl overflow-hidden">
-                        <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-900/40 flex justify-between items-center flex-shrink-0">
-                          <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                            Xem trước dữ liệu phân tích ({rawRows.filter((_, i) => importSelectedRows[i]).length} / {rawRows.length} lệnh được chọn)
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setImportSelectedRows(new Array(rawRows.length).fill(true))}
-                              className="text-[10px] text-indigo-400 hover:text-white font-semibold cursor-pointer"
-                            >
-                              Chọn tất cả
-                            </button>
-                            <span className="text-slate-700">|</span>
-                            <button
-                              type="button"
-                              onClick={() => setImportSelectedRows(new Array(rawRows.length).fill(false))}
-                              className="text-[10px] text-slate-400 hover:text-white font-semibold cursor-pointer"
-                            >
-                              Bỏ chọn tất cả
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex-1 overflow-auto max-h-[300px]">
-                          <table className="w-full text-left text-[11px] font-mono">
-                            <thead className="bg-[#0B1020] text-slate-500 uppercase text-[9.5px] border-b border-slate-800 sticky top-0 z-10">
-                              <tr>
-                                <th className="p-2.5 text-center w-10">Chọn</th>
-                                <th className="p-2.5">Cặp</th>
-                                <th className="p-2.5">Mua/Bán</th>
-                                <th className="p-2.5">Giá vào</th>
-                                <th className="p-2.5">SL / TP</th>
-                                <th className="p-2.5">Lợi nhuận</th>
-                                <th className="p-2.5">Thời gian mở / đóng</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-800 bg-[#121A2B]/20">
-                              {rawRows.map((row, idx) => {
-                                const symbol = row[columnMapping.symbol] || "Chưa khớp";
-                                const dirRaw = (row[columnMapping.direction] || "BUY").toUpperCase();
-                                const direction = (dirRaw.includes("SELL") || dirRaw.includes("SHORT")) ? "SELL" : "BUY";
-                                const entry = row[columnMapping.entry_price] || "0";
-                                const sl = row[columnMapping.stop_loss] || "0";
-                                const tp = row[columnMapping.take_profit] || "0";
-                                const profit = parseFloat(row[columnMapping.profit_loss]) || 0;
-                                const openTime = row[columnMapping.opened_at] || "-";
-                                const closeTime = row[columnMapping.closed_at] || "-";
-
-                                return (
-                                  <tr key={idx} className={`hover:bg-slate-800/10 transition-all ${importSelectedRows[idx] ? "" : "opacity-45 bg-[#0B1020]/20"}`}>
-                                    <td className="p-2.5 text-center">
-                                      <input
-                                        type="checkbox"
-                                        checked={importSelectedRows[idx] || false}
-                                        onChange={() => {
-                                          const copy = [...importSelectedRows];
-                                          copy[idx] = !copy[idx];
-                                          setImportSelectedRows(copy);
-                                        }}
-                                        className="cursor-pointer"
-                                      />
-                                    </td>
-                                    <td className="p-2.5 font-bold text-slate-200">{symbol}</td>
-                                    <td className="p-2.5">
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold ${direction === "BUY" ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
-                                        {direction}
-                                      </span>
-                                    </td>
-                                    <td className="p-2.5 text-slate-300">@{entry}</td>
-                                    <td className="p-2.5 text-slate-400">
-                                      <div className="text-[10px]">SL: {sl || "Không cài ⚠️"}</div>
-                                      <div className="text-[10px]">TP: {tp || "Chưa cài"}</div>
-                                    </td>
-                                    <td className={`p-2.5 font-bold ${profit > 0 ? "text-emerald-400" : profit < 0 ? "text-rose-400" : "text-slate-400"}`}>
-                                      {profit > 0 ? "+" : ""}{profit.toLocaleString("en-US")}
-                                    </td>
-                                    <td className="p-2.5 text-slate-400 text-[10px] leading-relaxed">
-                                      <div>Mở: {openTime}</div>
-                                      <div>Đóng: {closeTime}</div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Modal Footer buttons */}
-                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-850 flex-shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowImportTradesModal(false);
-                          setCsvFileText("");
-                          setCsvFileName("");
-                          setCsvHeaders([]);
-                          setRawRows([]);
-                        }}
-                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg cursor-pointer"
-                      >
-                        Đóng
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isImporting || rawRows.length === 0 || !importAccountId}
-                        className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 disabled:from-slate-800 disabled:to-slate-800 disabled:opacity-40 text-white font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-lg shadow-indigo-950/20"
-                      >
-                        {isImporting ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            Đang xử lý nhập...
-                          </>
-                        ) : (
-                          <>
-                            <span>Nhập dữ liệu lịch sử</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
-
-            {/* POPUP MODAL FOR ADDING/EDITING MARKET NEWS */}
-            {(showAddNewsModal || showEditNewsModal) && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scaleIn">
-                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
-                      <Calendar className="text-rose-500 w-4.5 h-4.5" /> 
-                      {showEditNewsModal ? "Cập nhật sự kiện vĩ mô" : "Tạo sự kiện vĩ mô mới"}
-                    </h3>
-                    <button 
-                      onClick={() => {
-                        setShowAddNewsModal(false);
-                        setShowEditNewsModal(false);
-                        setSelectedNewsToEdit(null);
-                      }}
-                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleNewsSubmit} className="p-6 space-y-4 text-xs">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Tên sự kiện / Tin tức</label>
-                        <input 
-                          type="text" 
-                          placeholder="Ví dụ: Chỉ số CPI lõi hàng tháng (Mỹ)..."
-                          value={newsForm.title}
-                          onChange={(e) => setNewsForm({ ...newsForm, title: e.target.value })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500"
-                          required
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Thời gian công bố (Ngày & Giờ)</label>
-                        <input 
-                          type="datetime-local" 
-                          value={newsForm.datetime}
-                          onChange={(e) => setNewsForm({ ...newsForm, datetime: e.target.value })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Mức độ ảnh hưởng</label>
-                        <select
-                          value={newsForm.impact}
-                          onChange={(e) => setNewsForm({ ...newsForm, impact: e.target.value as any })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
-                        >
-                          <option value="HIGH">🔴 Tác động mạnh (HIGH)</option>
-                          <option value="MEDIUM">🟡 Tác động vừa (MEDIUM)</option>
-                          <option value="LOW">⚪ Tác động yếu (LOW)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Hướng ảnh hưởng giá Vàng</label>
-                        <select
-                          value={newsForm.gold_impact_direction}
-                          onChange={(e) => setNewsForm({ ...newsForm, gold_impact_direction: e.target.value as any })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
-                        >
-                          <option value="VOLATILE">⚡ Biến động hai chiều mạnh</option>
-                          <option value="UP">📈 Vàng tăng giá (USD giảm)</option>
-                          <option value="DOWN">📉 Vàng giảm giá (USD tăng)</option>
-                          <option value="NEUTRAL">⚪ Ít tác động trực tiếp</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Kỳ trước</label>
-                        <input 
-                          type="text" 
-                          placeholder="3.5%"
-                          value={newsForm.previous}
-                          onChange={(e) => setNewsForm({ ...newsForm, previous: e.target.value })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Dự báo</label>
-                        <input 
-                          type="text" 
-                          placeholder="3.4%"
-                          value={newsForm.forecast}
-                          onChange={(e) => setNewsForm({ ...newsForm, forecast: e.target.value })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Thực tế</label>
-                        <input 
-                          type="text" 
-                          placeholder="Bỏ trống nếu chờ..."
-                          value={newsForm.actual}
-                          onChange={(e) => setNewsForm({ ...newsForm, actual: e.target.value })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Phân tích & Nhận định ảnh hưởng giá Vàng</label>
-                      <textarea
-                        placeholder="Nếu CPI cao hơn dự báo (USD tăng) -> Giá vàng sẽ giảm. Nếu thấp hơn dự báo -> Vàng bay cao..."
-                        value={newsForm.description}
-                        onChange={(e) => setNewsForm({ ...newsForm, description: e.target.value })}
-                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 h-20 leading-relaxed"
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowAddNewsModal(false);
-                          setShowEditNewsModal(false);
-                          setSelectedNewsToEdit(null);
-                        }}
-                        className="px-4 py-2 border border-slate-800 text-slate-300 rounded-lg hover:bg-slate-800 cursor-pointer"
-                      >
-                        Hủy bỏ
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-lg shadow-indigo-600/10 cursor-pointer"
-                      >
-                        {showEditNewsModal ? "Cập nhật sự kiện" : "Tạo sự kiện"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
-
-            {/* POPUP MODAL FOR ADDING USER-DEFINED REGULATIONS */}
-            {showAddRegModal && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleIn">
-                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
-                      <Scale className="text-amber-500 w-4.5 h-4.5" /> Thiết lập quy chế mới
-                    </h3>
-                    <button 
-                      onClick={() => setShowAddRegModal(false)}
-                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleRegSubmit} className="p-6 space-y-4 text-xs">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Tên quy chế / Hành quy phạm</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ví dụ: FOMO do đuổi theo sóng..."
-                        value={regForm.title}
-                        onChange={(e) => setRegForm({ ...regForm, title: e.target.value })}
-                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                        required
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Phân loại</label>
-                        <select
-                          value={regForm.type}
-                          onChange={(e) => setRegForm({ ...regForm, type: e.target.value as IncentiveType })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white"
-                        >
-                          <option value="REWARD">Thưởng (REWARD)</option>
-                          <option value="PENALTY">Phạt (PENALTY)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase font-mono">Định mức quy đổi (VNĐ)</label>
-                        <input 
-                          type="number" 
-                          placeholder="50000"
-                          value={regForm.amount}
-                          onChange={(e) => setRegForm({ ...regForm, amount: Number(e.target.value) || 0 })}
-                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono"
-                          required
-                          min="0"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Mô tả và cách thức áp dụng</label>
-                      <textarea 
-                        rows={3}
-                        placeholder="Quy chuẩn hoạt động cụ thể..."
-                        value={regForm.description}
-                        onChange={(e) => setRegForm({ ...regForm, description: e.target.value })}
-                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white resize-none"
-                        required
-                      />
-                    </div>
-
-                    <div className="border-t border-slate-800/80 pt-4 flex gap-2 justify-end">
-                      <button 
-                        type="button"
-                        onClick={() => setShowAddRegModal(false)}
-                        className="px-4 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg cursor-pointer hover:bg-slate-700/80"
-                      >
-                        Hủy
-                      </button>
-                      <button 
-                        type="submit"
-                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-indigo-500 hover:from-amber-600 hover:to-indigo-600 text-[#090D1A] font-extrabold rounded-lg cursor-pointer shadow-lg"
-                      >
-                        Lưu quy chế
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
-
-            {/* POPUP MODAL FOR QUICK APPLY REGULATION */}
-            {quickApplyState.isOpen && quickApplyState.reg && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleIn">
-                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center">
-                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
-                      <Scale className="text-amber-500 w-4.5 h-4.5" /> Áp dụng Quy Chế & Thưởng Phạt
-                    </h3>
-                    <button 
-                      onClick={() => setQuickApplyState({ ...quickApplyState, isOpen: false, reg: null })}
-                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <form onSubmit={handleQuickApplySubmit} className="p-6 space-y-4 text-xs">
-                    <div className="bg-[#0B1020]/60 p-3.5 rounded-lg border border-slate-800/80 space-y-1.5">
-                      <div className="flex justify-between items-baseline">
-                        <span className="font-bold text-slate-200 text-sm">{quickApplyState.reg.title}</span>
-                        <span className={`font-mono font-bold text-xs ${quickApplyState.reg.type === "REWARD" ? "text-emerald-400" : "text-rose-400"}`}>
-                          {quickApplyState.reg.type === "REWARD" ? "+" : "-"}{formatVND(quickApplyState.reg.amount)}
-                        </span>
-                      </div>
-                      <p className="text-slate-400 text-[11px] leading-relaxed">{quickApplyState.reg.description}</p>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Đối tượng áp dụng (Chọn một thành viên)</label>
-                      <select
-                        value={quickApplyState.selectedUserId}
-                        onChange={(e) => setQuickApplyState({ ...quickApplyState, selectedUserId: e.target.value })}
-                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-semibold focus:outline-none focus:border-indigo-500 text-xs"
-                        required
-                      >
-                        <option value="">-- Chọn thành viên nhận thưởng/phạt --</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Lý do & Nội dung chấp pháp</label>
-                      <input 
-                        type="text" 
-                        value={quickApplyState.reason}
-                        onChange={(e) => setQuickApplyState({ ...quickApplyState, reason: e.target.value })}
-                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-                        required
-                      />
-                    </div>
-
-                    <div className="border-t border-slate-800/80 pt-4 flex gap-2 justify-end">
-                      <button 
-                        type="button"
-                        onClick={() => setQuickApplyState({ ...quickApplyState, isOpen: false, reg: null })}
-                        className="px-4 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg cursor-pointer hover:bg-slate-700/80"
-                      >
-                        Hủy
-                      </button>
-                      <button 
-                        type="submit"
-                        className={`px-4 py-2 bg-gradient-to-r text-white font-extrabold rounded-lg cursor-pointer shadow-lg ${
-                          quickApplyState.reg.type === "REWARD"
-                            ? "from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
-                            : "from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700"
-                        }`}
-                      >
-                        Áp Dụng Thưởng Phạt
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -4982,6 +4446,544 @@ export default function App() {
           </div>
         </div>
       )}
+
+
+            {/* POPUP MODAL FOR IMPORTING TRADES FROM CSV */}
+            {showImportTradesModal && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-scaleIn">
+                  {/* Modal Header */}
+                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
+                      <RefreshCw className="text-indigo-500 w-4.5 h-4.5" />
+                      Nhập lịch sử giao dịch hàng loạt từ tệp CSV
+                    </h3>
+                    <button 
+                      onClick={() => {
+                        setShowImportTradesModal(false);
+                        setCsvFileText("");
+                        setCsvFileName("");
+                        setCsvHeaders([]);
+                        setRawRows([]);
+                      }}
+                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Modal Body */}
+                  <form onSubmit={handleCSVImportSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 text-xs flex flex-col">
+                    {/* Setup step 1: File upload & Account select */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Account selection */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Chọn tài khoản nhận dữ liệu</label>
+                        <select
+                          value={importAccountId}
+                          onChange={(e) => setImportAccountId(e.target.value)}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2.5 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
+                          required
+                        >
+                          <option value="">-- Chọn tài khoản nhận lịch sử --</option>
+                          {accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.account_type}) - Số dư: {a.currency === "VND" ? `${a.current_balance.toLocaleString("vi-VN")}₫` : `$${a.current_balance}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* File upload box */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Tải lên tệp CSV lịch sử (.csv)</label>
+                        <div className="relative border border-dashed border-slate-800 hover:border-indigo-500/60 rounded-lg px-4 py-2.5 bg-[#0B1020] flex items-center gap-3 cursor-pointer group transition-all">
+                          <input
+                            type="file"
+                            accept=".csv"
+                            onChange={handleCSVUpload}
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                          />
+                          <span className="p-1.5 bg-indigo-500/10 rounded-md text-indigo-400 group-hover:bg-indigo-500/20 transition-all font-sans">
+                            📁
+                          </span>
+                          <span className="text-[11px] text-slate-300 font-medium truncate">
+                            {csvFileName || "Chọn tệp CSV từ máy tính của bạn..."}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Setup step 2: Column mapping */}
+                    {csvHeaders.length > 0 && (
+                      <div className="bg-[#0B1020] border border-slate-800 rounded-xl p-5 space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
+                          <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest">Thiết lập ánh xạ cột (Column Mapping)</h4>
+                          <span className="text-[10px] text-slate-500 italic">Hệ thống đã tự động quét và khớp các cột tương thích. Bạn có thể chỉnh sửa lại.</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                          {[
+                            { key: "symbol", label: "Cột Symbol (Cặp tiền/Vàng)" },
+                            { key: "direction", label: "Cột Hướng (BUY/SELL)" },
+                            { key: "entry_price", label: "Cột Giá vào (Entry Price)" },
+                            { key: "stop_loss", label: "Cột Stop Loss (S/L)" },
+                            { key: "take_profit", label: "Cột Take Profit (T/P)" },
+                            { key: "profit_loss", label: "Cột Lợi Nhuận (Profit)" },
+                            { key: "opened_at", label: "Cột Ngày mở (Open Time)" },
+                            { key: "closed_at", label: "Cột Ngày đóng (Close Time)" }
+                          ].map(col => (
+                            <div key={col.key}>
+                              <label className="text-[9.5px] font-bold text-slate-400 block mb-1 truncate">{col.label}</label>
+                              <select
+                                value={(columnMapping as any)[col.key]}
+                                onChange={(e) => setColumnMapping({ ...columnMapping, [col.key]: e.target.value })}
+                                className="w-full bg-slate-900 border border-slate-800 px-2 py-1.5 rounded text-slate-200 outline-none text-[11px] focus:border-indigo-500 font-sans"
+                              >
+                                <option value="">-- Không ánh xạ --</option>
+                                {csvHeaders.map(h => (
+                                  <option key={h} value={h}>{h}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Setup step 3: Preview Table */}
+                    {rawRows.length > 0 && (
+                      <div className="flex-1 flex flex-col min-h-[250px] bg-[#0B1020] border border-slate-800 rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-900/40 flex justify-between items-center flex-shrink-0">
+                          <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                            Xem trước dữ liệu phân tích ({rawRows.filter((_, i) => importSelectedRows[i]).length} / {rawRows.length} lệnh được chọn)
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setImportSelectedRows(new Array(rawRows.length).fill(true))}
+                              className="text-[10px] text-indigo-400 hover:text-white font-semibold cursor-pointer"
+                            >
+                              Chọn tất cả
+                            </button>
+                            <span className="text-slate-700">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setImportSelectedRows(new Array(rawRows.length).fill(false))}
+                              className="text-[10px] text-slate-400 hover:text-white font-semibold cursor-pointer"
+                            >
+                              Bỏ chọn tất cả
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-auto max-h-[300px]">
+                          <table className="w-full text-left text-[11px] font-mono">
+                            <thead className="bg-[#0B1020] text-slate-500 uppercase text-[9.5px] border-b border-slate-800 sticky top-0 z-10">
+                              <tr>
+                                <th className="p-2.5 text-center w-10">Chọn</th>
+                                <th className="p-2.5">Cặp</th>
+                                <th className="p-2.5">Mua/Bán</th>
+                                <th className="p-2.5">Giá vào</th>
+                                <th className="p-2.5">SL / TP</th>
+                                <th className="p-2.5">Lợi nhuận</th>
+                                <th className="p-2.5">Thời gian mở / đóng</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800 bg-[#121A2B]/20">
+                              {rawRows.map((row, idx) => {
+                                const symbol = row[columnMapping.symbol] || "Chưa khớp";
+                                const dirRaw = (row[columnMapping.direction] || "BUY").toUpperCase();
+                                const direction = (dirRaw.includes("SELL") || dirRaw.includes("SHORT")) ? "SELL" : "BUY";
+                                const entry = row[columnMapping.entry_price] || "0";
+                                const sl = row[columnMapping.stop_loss] || "0";
+                                const tp = row[columnMapping.take_profit] || "0";
+                                const profit = parseFloat(row[columnMapping.profit_loss]) || 0;
+                                const openTime = row[columnMapping.opened_at] || "-";
+                                const closeTime = row[columnMapping.closed_at] || "-";
+
+                                return (
+                                  <tr key={idx} className={`hover:bg-slate-800/10 transition-all ${importSelectedRows[idx] ? "" : "opacity-45 bg-[#0B1020]/20"}`}>
+                                    <td className="p-2.5 text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={importSelectedRows[idx] || false}
+                                        onChange={() => {
+                                          const copy = [...importSelectedRows];
+                                          copy[idx] = !copy[idx];
+                                          setImportSelectedRows(copy);
+                                        }}
+                                        className="cursor-pointer"
+                                      />
+                                    </td>
+                                    <td className="p-2.5 font-bold text-slate-200">{symbol}</td>
+                                    <td className="p-2.5">
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold ${direction === "BUY" ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
+                                        {direction}
+                                      </span>
+                                    </td>
+                                    <td className="p-2.5 text-slate-300">@{entry}</td>
+                                    <td className="p-2.5 text-slate-400">
+                                      <div className="text-[10px]">SL: {sl || "Không cài ⚠️"}</div>
+                                      <div className="text-[10px]">TP: {tp || "Chưa cài"}</div>
+                                    </td>
+                                    <td className={`p-2.5 font-bold ${profit > 0 ? "text-emerald-400" : profit < 0 ? "text-rose-400" : "text-slate-400"}`}>
+                                      {profit > 0 ? "+" : ""}{profit.toLocaleString("en-US")}
+                                    </td>
+                                    <td className="p-2.5 text-slate-400 text-[10px] leading-relaxed">
+                                      <div>Mở: {openTime}</div>
+                                      <div>Đóng: {closeTime}</div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Modal Footer buttons */}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-850 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowImportTradesModal(false);
+                          setCsvFileText("");
+                          setCsvFileName("");
+                          setCsvHeaders([]);
+                          setRawRows([]);
+                        }}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg cursor-pointer"
+                      >
+                        Đóng
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isImporting || rawRows.length === 0 || !importAccountId}
+                        className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 disabled:from-slate-800 disabled:to-slate-800 disabled:opacity-40 text-white font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-lg shadow-indigo-950/20"
+                      >
+                        {isImporting ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Đang xử lý nhập...
+                          </>
+                        ) : (
+                          <>
+                            <span>Nhập dữ liệu lịch sử</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* POPUP MODAL FOR ADDING/EDITING MARKET NEWS */}
+            {(showAddNewsModal || showEditNewsModal) && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-scaleIn">
+                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
+                      <Calendar className="text-rose-500 w-4.5 h-4.5" /> 
+                      {showEditNewsModal ? "Cập nhật sự kiện vĩ mô" : "Tạo sự kiện vĩ mô mới"}
+                    </h3>
+                    <button 
+                      onClick={() => {
+                        setShowAddNewsModal(false);
+                        setShowEditNewsModal(false);
+                        setSelectedNewsToEdit(null);
+                      }}
+                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleNewsSubmit} className="p-6 space-y-4 text-xs">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Tên sự kiện / Tin tức</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ví dụ: Chỉ số CPI lõi hàng tháng (Mỹ)..."
+                          value={newsForm.title}
+                          onChange={(e) => setNewsForm({ ...newsForm, title: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Thời gian công bố (Ngày & Giờ)</label>
+                        <input 
+                          type="datetime-local" 
+                          value={newsForm.datetime}
+                          onChange={(e) => setNewsForm({ ...newsForm, datetime: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Mức độ ảnh hưởng</label>
+                        <select
+                          value={newsForm.impact}
+                          onChange={(e) => setNewsForm({ ...newsForm, impact: e.target.value as any })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
+                        >
+                          <option value="HIGH">🔴 Tác động mạnh (HIGH)</option>
+                          <option value="MEDIUM">🟡 Tác động vừa (MEDIUM)</option>
+                          <option value="LOW">⚪ Tác động yếu (LOW)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Hướng ảnh hưởng giá Vàng</label>
+                        <select
+                          value={newsForm.gold_impact_direction}
+                          onChange={(e) => setNewsForm({ ...newsForm, gold_impact_direction: e.target.value as any })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
+                        >
+                          <option value="VOLATILE">⚡ Biến động hai chiều mạnh</option>
+                          <option value="UP">📈 Vàng tăng giá (USD giảm)</option>
+                          <option value="DOWN">📉 Vàng giảm giá (USD tăng)</option>
+                          <option value="NEUTRAL">⚪ Ít tác động trực tiếp</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Kỳ trước</label>
+                        <input 
+                          type="text" 
+                          placeholder="3.5%"
+                          value={newsForm.previous}
+                          onChange={(e) => setNewsForm({ ...newsForm, previous: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Dự báo</label>
+                        <input 
+                          type="text" 
+                          placeholder="3.4%"
+                          value={newsForm.forecast}
+                          onChange={(e) => setNewsForm({ ...newsForm, forecast: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Thực tế</label>
+                        <input 
+                          type="text" 
+                          placeholder="Bỏ trống nếu chờ..."
+                          value={newsForm.actual}
+                          onChange={(e) => setNewsForm({ ...newsForm, actual: e.target.value })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 font-mono text-center"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Phân tích & Nhận định ảnh hưởng giá Vàng</label>
+                      <textarea
+                        placeholder="Nếu CPI cao hơn dự báo (USD tăng) -> Giá vàng sẽ giảm. Nếu thấp hơn dự báo -> Vàng bay cao..."
+                        value={newsForm.description}
+                        onChange={(e) => setNewsForm({ ...newsForm, description: e.target.value })}
+                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white outline-none focus:border-indigo-500 h-20 leading-relaxed"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddNewsModal(false);
+                          setShowEditNewsModal(false);
+                          setSelectedNewsToEdit(null);
+                        }}
+                        className="px-4 py-2 border border-slate-800 text-slate-300 rounded-lg hover:bg-slate-800 cursor-pointer"
+                      >
+                        Hủy bỏ
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-lg shadow-indigo-600/10 cursor-pointer"
+                      >
+                        {showEditNewsModal ? "Cập nhật sự kiện" : "Tạo sự kiện"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* POPUP MODAL FOR ADDING USER-DEFINED REGULATIONS */}
+            {showAddRegModal && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleIn">
+                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
+                      <Scale className="text-amber-500 w-4.5 h-4.5" /> Thiết lập quy chế mới
+                    </h3>
+                    <button 
+                      onClick={() => setShowAddRegModal(false)}
+                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleRegSubmit} className="p-6 space-y-4 text-xs">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase tracking-wider">Tên quy chế / Hành quy phạm</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ví dụ: FOMO do đuổi theo sóng..."
+                        value={regForm.title}
+                        onChange={(e) => setRegForm({ ...regForm, title: e.target.value })}
+                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                        required
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Phân loại</label>
+                        <select
+                          value={regForm.type}
+                          onChange={(e) => setRegForm({ ...regForm, type: e.target.value as IncentiveType })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white"
+                        >
+                          <option value="REWARD">Thưởng (REWARD)</option>
+                          <option value="PENALTY">Phạt (PENALTY)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase font-mono">Định mức quy đổi (VNĐ)</label>
+                        <input 
+                          type="number" 
+                          placeholder="50000"
+                          value={regForm.amount}
+                          onChange={(e) => setRegForm({ ...regForm, amount: Number(e.target.value) || 0 })}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono"
+                          required
+                          min="0"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Mô tả và cách thức áp dụng</label>
+                      <textarea 
+                        rows={3}
+                        placeholder="Quy chuẩn hoạt động cụ thể..."
+                        value={regForm.description}
+                        onChange={(e) => setRegForm({ ...regForm, description: e.target.value })}
+                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white resize-none"
+                        required
+                      />
+                    </div>
+
+                    <div className="border-t border-slate-800/80 pt-4 flex gap-2 justify-end">
+                      <button 
+                        type="button"
+                        onClick={() => setShowAddRegModal(false)}
+                        className="px-4 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg cursor-pointer hover:bg-slate-700/80"
+                      >
+                        Hủy
+                      </button>
+                      <button 
+                        type="submit"
+                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-indigo-500 hover:from-amber-600 hover:to-indigo-600 text-[#090D1A] font-extrabold rounded-lg cursor-pointer shadow-lg"
+                      >
+                        Lưu quy chế
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* POPUP MODAL FOR QUICK APPLY REGULATION */}
+            {quickApplyState.isOpen && quickApplyState.reg && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-scaleIn">
+                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center">
+                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
+                      <Scale className="text-amber-500 w-4.5 h-4.5" /> Áp dụng Quy Chế & Thưởng Phạt
+                    </h3>
+                    <button 
+                      onClick={() => setQuickApplyState({ ...quickApplyState, isOpen: false, reg: null })}
+                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleQuickApplySubmit} className="p-6 space-y-4 text-xs">
+                    <div className="bg-[#0B1020]/60 p-3.5 rounded-lg border border-slate-800/80 space-y-1.5">
+                      <div className="flex justify-between items-baseline">
+                        <span className="font-bold text-slate-200 text-sm">{quickApplyState.reg.title}</span>
+                        <span className={`font-mono font-bold text-xs ${quickApplyState.reg.type === "REWARD" ? "text-emerald-400" : "text-rose-400"}`}>
+                          {quickApplyState.reg.type === "REWARD" ? "+" : "-"}{formatVND(quickApplyState.reg.amount)}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 text-[11px] leading-relaxed">{quickApplyState.reg.description}</p>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Đối tượng áp dụng (Chọn một thành viên)</label>
+                      <select
+                        value={quickApplyState.selectedUserId}
+                        onChange={(e) => setQuickApplyState({ ...quickApplyState, selectedUserId: e.target.value })}
+                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-semibold focus:outline-none focus:border-indigo-500 text-xs"
+                        required
+                      >
+                        <option value="">-- Chọn thành viên nhận thưởng/phạt --</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1 uppercase">Lý do & Nội dung chấp pháp</label>
+                      <input 
+                        type="text" 
+                        value={quickApplyState.reason}
+                        onChange={(e) => setQuickApplyState({ ...quickApplyState, reason: e.target.value })}
+                        className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+                        required
+                      />
+                    </div>
+
+                    <div className="border-t border-slate-800/80 pt-4 flex gap-2 justify-end">
+                      <button 
+                        type="button"
+                        onClick={() => setQuickApplyState({ ...quickApplyState, isOpen: false, reg: null })}
+                        className="px-4 py-2 bg-slate-800 text-slate-300 font-bold rounded-lg cursor-pointer hover:bg-slate-700/80"
+                      >
+                        Hủy
+                      </button>
+                      <button 
+                        type="submit"
+                        className={`px-4 py-2 bg-gradient-to-r text-white font-extrabold rounded-lg cursor-pointer shadow-lg ${
+                          quickApplyState.reg.type === "REWARD"
+                            ? "from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
+                            : "from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700"
+                        }`}
+                      >
+                        Áp Dụng Thưởng Phạt
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
       {/* 11. CUSTOM CONFIRMATION & ALERT DIALOGS (SANDBOX WORKAROUND) */}
       <AnimatePresence>
