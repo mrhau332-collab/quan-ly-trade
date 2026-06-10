@@ -24,8 +24,8 @@
       "account_type": "TopStep",
       "owner_id": "2",
       "starting_balance": 50000,
-      "current_balance": 49000,
-      "equity": 48900,
+      "current_balance": 49300,
+      "equity": 49300,
       "daily_drawdown_limit": 1000,
       "max_drawdown_limit": 2000,
       "status": "ACTIVE",
@@ -34,12 +34,94 @@
       "purchase_price": 2300000
     }
   ],
-  "trades": [],
-  "trade_mistakes": [],
-  "rewards_penalties": [],
+  "trades": [
+    {
+      "id": "trade_6yodnu1_1781108401703",
+      "account_id": "acct_2",
+      "user_id": "2",
+      "symbol": "XAUUSD",
+      "direction": "BUY",
+      "entry_price": 2320.5,
+      "stop_loss": 2315,
+      "take_profit": 2335,
+      "risk_amount": 245,
+      "risk_percent": 0.5,
+      "rr_ratio": 2.64,
+      "setup_name": "Lịch sử import",
+      "trade_plan": "Nhập từ tệp lịch sử.",
+      "entry_reason": "Nhập từ tệp lịch sử.",
+      "emotion_before_trade": "NEUTRAL",
+      "opened_at": "2026-06-10T15:20:01.624Z",
+      "closed_at": "2026-06-10T16:20:01.625Z",
+      "result": "WIN",
+      "profit_loss": 500,
+      "profit_loss_percent": 1.02,
+      "screenshot_before": "",
+      "screenshot_after": "",
+      "notes": "Nhập tự động bằng tệp lịch sử.",
+      "created_at": "2026-06-10T16:20:01.703Z"
+    },
+    {
+      "id": "trade_vpxpx24_1781108401703",
+      "account_id": "acct_2",
+      "user_id": "2",
+      "symbol": "EURUSD",
+      "direction": "SELL",
+      "entry_price": 1.085,
+      "stop_loss": 0,
+      "take_profit": 1.075,
+      "risk_amount": 247.5,
+      "risk_percent": 0.5,
+      "rr_ratio": 0.01,
+      "setup_name": "Lịch sử import",
+      "trade_plan": "Nhập từ tệp lịch sử.",
+      "entry_reason": "Nhập từ tệp lịch sử.",
+      "emotion_before_trade": "NEUTRAL",
+      "opened_at": "2026-06-10T14:20:01.625Z",
+      "closed_at": "2026-06-10T16:20:01.625Z",
+      "result": "LOSS",
+      "profit_loss": -200,
+      "profit_loss_percent": -0.4,
+      "screenshot_before": "",
+      "screenshot_after": "",
+      "notes": "Nhập tự động bằng tệp lịch sử.",
+      "created_at": "2026-06-10T16:20:01.703Z"
+    }
+  ],
+  "trade_mistakes": [
+    {
+      "id": "mist_bdnrpnt_1781108401703",
+      "trade_id": "trade_vpxpx24_1781108401703",
+      "user_id": "2",
+      "mistake_type": "NO_STOP_LOSS",
+      "description": "Lệnh nhập từ file EURUSD không cài cắt lỗ SL!",
+      "severity": "HIGH",
+      "penalty_score": 20,
+      "created_at": "2026-06-10T16:20:01.703Z"
+    }
+  ],
+  "rewards_penalties": [
+    {
+      "id": "rp_hihod8b_1781108401703",
+      "user_id": "2",
+      "type": "PENALTY",
+      "score": 50000,
+      "reason": "Hệ thống phạt tự động (Nhập file): Lệnh EURUSD không có Stop Loss (-50.000₫)",
+      "created_by": "SYSTEM",
+      "created_at": "2026-06-10T16:20:01.703Z"
+    }
+  ],
   "accountability_reviews": [],
   "daily_journals": [],
   "notifications": [
+    {
+      "id": "not_sdn3xxf_1781108401703",
+      "title": "Nhập lịch sử lệnh hàng loạt",
+      "message": "Đức vừa nhập 2 lệnh trade từ tệp lịch sử cho tk TopStep Funded $50k. Phát hiện 1 lỗi kỷ luật.",
+      "type": "warning",
+      "read": false,
+      "created_at": "2026-06-10T16:20:01.703Z"
+    },
     {
       "id": "not_wkl6fc0_1780905921016",
       "title": "Điểm thưởng mới!",

@@ -1106,6 +1106,158 @@ app.put("/api/trades/:id", async (req, res) => {
   }
 });
 
+// 8a.2 Import closed trades in bulk (CSV Import)
+app.post("/api/trades/import", async (req, res) => {
+  try {
+    const db = await readDB();
+    const { account_id, user_id, trades } = req.body;
+
+    if (!account_id || !user_id || !Array.isArray(trades)) {
+      return res.status(400).json({ error: "Missing required fields: account_id, user_id, or trades array." });
+    }
+
+    const account = db.trading_accounts.find((a: any) => a.id === account_id);
+    if (!account) {
+      return res.status(404).json({ error: "Trading account not found." });
+    }
+
+    let importedCount = 0;
+    let addedMistakesCount = 0;
+    let addedPenaltiesCount = 0;
+
+    for (const t of trades) {
+      const symbol = (t.symbol || "UNKNOWN").toUpperCase();
+      const direction = t.direction === "SELL" ? TradeDirection.SELL : TradeDirection.BUY;
+      const entry_price = Number(t.entry_price || 0);
+      const stop_loss = Number(t.stop_loss || 0);
+      const take_profit = Number(t.take_profit || 0);
+      const profit_loss = Number(t.profit_loss || 0);
+      
+      // Fallback risk amount: 0.5% of balance or standard 500
+      const risk_amount = Number(t.risk_amount || (account.current_balance * 0.005) || 500);
+
+      const calculatedRiskPercent = Number(((risk_amount / account.current_balance) * 100).toFixed(2));
+      const tpDiff = Math.abs(take_profit - entry_price);
+      const slDiff = Math.abs(entry_price - stop_loss);
+      const rrRatio = slDiff > 0 ? Number((tpDiff / slDiff).toFixed(2)) : 0;
+
+      const opened_at = t.opened_at ? new Date(t.opened_at).toISOString() : new Date().toISOString();
+      const closed_at = t.closed_at ? new Date(t.closed_at).toISOString() : new Date().toISOString();
+
+      let result = TradeResult.BE;
+      if (profit_loss > 0) result = TradeResult.WIN;
+      else if (profit_loss < 0) result = TradeResult.LOSS;
+
+      const newTrade: Trade = {
+        id: "trade_" + generateUUID(),
+        account_id,
+        user_id,
+        symbol,
+        direction,
+        entry_price,
+        stop_loss,
+        take_profit,
+        risk_amount,
+        risk_percent: calculatedRiskPercent,
+        rr_ratio: rrRatio,
+        setup_name: t.setup_name || "Lịch sử import",
+        trade_plan: t.trade_plan || "Nhập từ tệp lịch sử.",
+        entry_reason: t.entry_reason || "Nhập từ tệp lịch sử.",
+        emotion_before_trade: TradeEmotion.NEUTRAL,
+        opened_at,
+        closed_at,
+        result,
+        profit_loss,
+        profit_loss_percent: Number(((profit_loss / account.current_balance) * 100).toFixed(2)),
+        screenshot_before: "",
+        screenshot_after: "",
+        notes: t.notes || "Nhập tự động bằng tệp lịch sử.",
+        created_at: new Date().toISOString()
+      };
+
+      db.trades.push(newTrade);
+      importedCount++;
+
+      // Adjust account balance
+      account.current_balance = Number((account.current_balance + profit_loss).toFixed(2));
+
+      // Rule Check: No Stop Loss Detection
+      if (!stop_loss || Number(stop_loss) === 0) {
+        const mistakeId = "mist_" + generateUUID();
+        db.trade_mistakes.push({
+          id: mistakeId,
+          trade_id: newTrade.id,
+          user_id,
+          mistake_type: MistakeType.NO_STOP_LOSS,
+          description: `Lệnh nhập từ file ${symbol} không cài cắt lỗ SL!`,
+          severity: MistakeSeverity.HIGH,
+          penalty_score: 20,
+          created_at: new Date().toISOString()
+        });
+        addedMistakesCount++;
+
+        db.rewards_penalties.push({
+          id: "rp_" + generateUUID(),
+          user_id,
+          type: IncentiveType.PENALTY,
+          score: 50000,
+          reason: `Hệ thống phạt tự động (Nhập file): Lệnh ${symbol} không có Stop Loss (-50.000₫)`,
+          created_by: "SYSTEM",
+          created_at: new Date().toISOString()
+        });
+        addedPenaltiesCount++;
+      }
+
+      // Rule Check: Over-sizing Account Rule
+      if (calculatedRiskPercent > 0.5) {
+        const mistakeId = "mist_" + generateUUID();
+        db.trade_mistakes.push({
+          id: mistakeId,
+          trade_id: newTrade.id,
+          user_id,
+          mistake_type: MistakeType.OVERSIZED_POSITION,
+          description: `Lệnh nhập từ file ${symbol} vượt tỉ lệ rủi ro (${calculatedRiskPercent}% > 0.5%).`,
+          severity: MistakeSeverity.MEDIUM,
+          penalty_score: 10,
+          created_at: new Date().toISOString()
+        });
+        addedMistakesCount++;
+
+        db.rewards_penalties.push({
+          id: "rp_" + generateUUID(),
+          user_id,
+          type: IncentiveType.PENALTY,
+          score: 30000,
+          reason: `Hệ thống phạt tự động (Nhập file): Rủi ro ${calculatedRiskPercent}% vượt quy chuẩn (-30.000₫)`,
+          created_by: "SYSTEM",
+          created_at: new Date().toISOString()
+        });
+        addedPenaltiesCount++;
+      }
+    }
+
+    // Keep active equity in sync
+    account.equity = account.current_balance;
+
+    // Create system notification
+    const traderUser = db.users.find((u: any) => u.id === user_id);
+    const traderName = traderUser ? traderUser.name : "Trader";
+    db.notifications.unshift({
+      id: "not_" + generateUUID(),
+      title: "Nhập lịch sử lệnh hàng loạt",
+      message: `${traderName} vừa nhập ${importedCount} lệnh trade từ tệp lịch sử cho tk ${account.name}. Phát hiện ${addedMistakesCount} lỗi kỷ luật.`,
+      type: addedMistakesCount > 0 ? "warning" : "success",
+      read: false,
+      created_at: new Date().toISOString()
+    });
+
+    await writeDB(db);
+    res.json({ success: true, imported: importedCount, mistakes: addedMistakesCount, penalties: addedPenaltiesCount });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to import trades: " + error.message });
+  }
+});
+
 // 8b. Add Trading Account
 app.post("/api/accounts", async (req, res) => {
   try {

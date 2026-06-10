@@ -273,6 +273,7 @@ export default function App() {
   const [showAddRegModal, setShowAddRegModal] = useState(false);
   const [showAddNewsModal, setShowAddNewsModal] = useState(false);
   const [showEditNewsModal, setShowEditNewsModal] = useState(false);
+  const [showImportTradesModal, setShowImportTradesModal] = useState(false);
   const [selectedNewsToEdit, setSelectedNewsToEdit] = useState<MarketNews | null>(null);
   
   const [newsForm, setNewsForm] = useState({
@@ -303,6 +304,146 @@ export default function App() {
     amount: 50000,
     description: ""
   });
+
+  // CSV Import States
+  const [csvFileText, setCsvFileText] = useState("");
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [rawRows, setRawRows] = useState<any[]>([]);
+  const [columnMapping, setColumnMapping] = useState({
+    symbol: "",
+    direction: "",
+    entry_price: "",
+    stop_loss: "",
+    take_profit: "",
+    profit_loss: "",
+    opened_at: "",
+    closed_at: "",
+    risk_amount: ""
+  });
+  const [importAccountId, setImportAccountId] = useState("");
+  const [importSelectedRows, setImportSelectedRows] = useState<boolean[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+
+  // CSV Parsing helper functions
+  const parseCSVData = (text: string) => {
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 2) return null;
+
+    let delimiter = ",";
+    const firstLine = lines[0];
+    if (firstLine.includes(";")) delimiter = ";";
+    else if (firstLine.includes("\t")) delimiter = "\t";
+
+    const parseLine = (line: string) => {
+      const result = [];
+      let curVal = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === delimiter && !inQuotes) {
+          result.push(curVal.trim().replace(/^"|"$/g, ""));
+          curVal = "";
+        } else {
+          curVal += char;
+        }
+      }
+      result.push(curVal.trim().replace(/^"|"$/g, ""));
+      return result;
+    };
+
+    const headers = parseLine(lines[0]).map(h => h.trim());
+    const rows: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const values = parseLine(line);
+      if (values.length < headers.length) continue;
+
+      const rowObj: any = {};
+      headers.forEach((header, index) => {
+        rowObj[header] = values[index];
+      });
+      rows.push(rowObj);
+    }
+
+    return { headers, rows };
+  };
+
+  const autoDetectColumns = (headers: string[]) => {
+    const mapping = {
+      symbol: "",
+      direction: "",
+      entry_price: "",
+      stop_loss: "",
+      take_profit: "",
+      profit_loss: "",
+      opened_at: "",
+      closed_at: "",
+      risk_amount: ""
+    };
+
+    const findMatch = (keys: string[]) => {
+      for (const header of headers) {
+        const lower = header.toLowerCase().replace(/[\s_\/-]/g, "");
+        for (const key of keys) {
+          if (lower.includes(key.toLowerCase().replace(/[\s_\/-]/g, ""))) {
+            return header;
+          }
+        }
+      }
+      return "";
+    };
+
+    mapping.symbol = findMatch(["symbol", "pair", "item", "ticker", "asset", "instrument", "mã", "cặp"]);
+    mapping.direction = findMatch(["type", "dir", "direction", "action", "side", "loại", "hướng"]);
+    mapping.entry_price = findMatch(["entry", "openprice", "giávào", "giámở", "open_price", "entry_price"]);
+    mapping.stop_loss = findMatch(["stoploss", "sl", "stop_loss", "cắtlỗ"]);
+    mapping.take_profit = findMatch(["takeprofit", "tp", "take_profit", "chốtlời"]);
+    mapping.profit_loss = findMatch(["profit", "loss", "pl", "pnl", "lợinhuận", "kếtquả"]);
+    mapping.opened_at = findMatch(["opentime", "opened", "date", "time", "ngàyvào", "open_time"]);
+    mapping.closed_at = findMatch(["closetime", "closed", "ngàyđóng", "close_time"]);
+    mapping.risk_amount = findMatch(["risk", "riskamount", "rủiro", "risk_amount"]);
+
+    // Set fallback index-based defaults if not matched
+    if (!mapping.symbol && headers.length > 4) mapping.symbol = headers[4]; // Item
+    if (!mapping.direction && headers.length > 2) mapping.direction = headers[2]; // Type
+    if (!mapping.entry_price && headers.length > 5) mapping.entry_price = headers[5]; // Price (open)
+    if (!mapping.stop_loss && headers.length > 6) mapping.stop_loss = headers[6]; // S/L
+    if (!mapping.take_profit && headers.length > 7) mapping.take_profit = headers[7]; // T/P
+    if (!mapping.profit_loss && headers.length > 13) mapping.profit_loss = headers[13]; // Profit
+
+    return mapping;
+  };
+
+  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCsvFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      setCsvFileText(text);
+
+      const parsed = parseCSVData(text);
+      if (parsed) {
+        setCsvHeaders(parsed.headers);
+        setRawRows(parsed.rows);
+        
+        // Auto-detect columns
+        const detected = autoDetectColumns(parsed.headers);
+        setColumnMapping(detected);
+
+        // Pre-select all rows
+        setImportSelectedRows(new Array(parsed.rows.length).fill(true));
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Load active DB state from fullstack API
   const fetchDB = async (showProgress = false) => {
@@ -603,6 +744,87 @@ export default function App() {
       showCustomAlert("Thất bại", "Lỗi đồng bộ: " + err.message, "error");
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleCSVImportSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeUser) return;
+    if (!importAccountId) {
+      showCustomAlert("Chưa chọn tài khoản", "Vui lòng chọn tài khoản giao dịch để nhận lệnh.", "info");
+      return;
+    }
+
+    const selectedTrades = rawRows.filter((_, idx) => importSelectedRows[idx]).map(row => {
+      // Map columns
+      const symbol = row[columnMapping.symbol] || "UNKNOWN";
+      const directionRaw = (row[columnMapping.direction] || "BUY").toUpperCase();
+      const direction = (directionRaw.includes("SELL") || directionRaw.includes("SHORT")) ? "SELL" : "BUY";
+      
+      const entry_price = parseFloat(row[columnMapping.entry_price]) || 0;
+      const stop_loss = parseFloat(row[columnMapping.stop_loss]) || 0;
+      const take_profit = parseFloat(row[columnMapping.take_profit]) || 0;
+      const profit_loss = parseFloat(row[columnMapping.profit_loss]) || 0;
+      const risk_amount = parseFloat(row[columnMapping.risk_amount]) || 0;
+
+      const opened_at = row[columnMapping.opened_at] || new Date().toISOString();
+      const closed_at = row[columnMapping.closed_at] || new Date().toISOString();
+
+      return {
+        symbol,
+        direction,
+        entry_price,
+        stop_loss,
+        take_profit,
+        profit_loss,
+        risk_amount: risk_amount || undefined,
+        opened_at,
+        closed_at
+      };
+    });
+
+    if (selectedTrades.length === 0) {
+      showCustomAlert("Không có lệnh nào được chọn", "Vui lòng tích chọn ít nhất một lệnh giao dịch để nhập.", "info");
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const resp = await fetch("/api/trades/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account_id: importAccountId,
+          user_id: activeUser.id,
+          trades: selectedTrades
+        })
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json();
+        throw new Error(errData.error || "Không thể nhập lịch sử giao dịch.");
+      }
+
+      const data = await resp.json();
+      await fetchDB();
+      setShowImportTradesModal(false);
+      
+      // Reset states
+      setCsvFileText("");
+      setCsvFileName("");
+      setCsvHeaders([]);
+      setRawRows([]);
+      setImportSelectedRows([]);
+      
+      showCustomAlert(
+        "Thành công",
+        `Đã nhập thành công ${data.imported} lệnh! Ghi nhận thêm ${data.mistakes} lỗi kỷ luật và phạt ${data.penalties} lần.`,
+        "success"
+      );
+    } catch (err: any) {
+      showCustomAlert("Thất bại", "Lỗi nhập file: " + err.message, "error");
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -1758,13 +1980,22 @@ export default function App() {
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">Danh sách đầy đủ các lệnh trade, trạng thái và tỷ lệ rủi ro.</p>
               </div>
-              <button
-                id="create-trade-btn-journal"
-                onClick={() => setShowOpenTradeModal(true)}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white rounded-lg flex items-center gap-2 transition-all cursor-pointer self-start"
-              >
-                <Plus className="w-4 h-4" /> Mở nến giao dịch mới
-              </button>
+              <div className="flex items-center gap-2 flex-wrap self-start">
+                <button
+                  id="import-trade-btn-journal"
+                  onClick={() => setShowImportTradesModal(true)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-slate-700/60 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <RefreshCw className="w-4 h-4" /> Nhập lịch sử bằng CSV
+                </button>
+                <button
+                  id="create-trade-btn-journal"
+                  onClick={() => setShowOpenTradeModal(true)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Mở nến giao dịch mới
+                </button>
+              </div>
             </div>
 
             {/* Trade Records List Grid */}
@@ -2907,6 +3138,236 @@ export default function App() {
               </div>
 
             </div>
+
+            {/* POPUP MODAL FOR IMPORTING TRADES FROM CSV */}
+            {showImportTradesModal && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-[#121A2B] border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-scaleIn">
+                  {/* Modal Header */}
+                  <div className="bg-[#0B1020] px-6 py-4 border-b border-slate-800 flex justify-between items-center flex-shrink-0">
+                    <h3 className="text-white font-extrabold text-sm flex items-center gap-1.5">
+                      <RefreshCw className="text-indigo-500 w-4.5 h-4.5" />
+                      Nhập lịch sử giao dịch hàng loạt từ tệp CSV
+                    </h3>
+                    <button 
+                      onClick={() => {
+                        setShowImportTradesModal(false);
+                        setCsvFileText("");
+                        setCsvFileName("");
+                        setCsvHeaders([]);
+                        setRawRows([]);
+                      }}
+                      className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Modal Body */}
+                  <form onSubmit={handleCSVImportSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 text-xs flex flex-col">
+                    {/* Setup step 1: File upload & Account select */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Account selection */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Chọn tài khoản nhận dữ liệu</label>
+                        <select
+                          value={importAccountId}
+                          onChange={(e) => setImportAccountId(e.target.value)}
+                          className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2.5 rounded-lg text-white outline-none focus:border-indigo-500 font-semibold"
+                          required
+                        >
+                          <option value="">-- Chọn tài khoản nhận lịch sử --</option>
+                          {accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.name} ({a.account_type}) - Số dư: {a.currency === "VND" ? `${a.current_balance.toLocaleString("vi-VN")}₫` : `$${a.current_balance}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* File upload box */}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1.5 uppercase tracking-wider">Tải lên tệp CSV lịch sử (.csv)</label>
+                        <div className="relative border border-dashed border-slate-800 hover:border-indigo-500/60 rounded-lg px-4 py-2.5 bg-[#0B1020] flex items-center gap-3 cursor-pointer group transition-all">
+                          <input
+                            type="file"
+                            accept=".csv"
+                            onChange={handleCSVUpload}
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                          />
+                          <span className="p-1.5 bg-indigo-500/10 rounded-md text-indigo-400 group-hover:bg-indigo-500/20 transition-all font-sans">
+                            📁
+                          </span>
+                          <span className="text-[11px] text-slate-300 font-medium truncate">
+                            {csvFileName || "Chọn tệp CSV từ máy tính của bạn..."}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Setup step 2: Column mapping */}
+                    {csvHeaders.length > 0 && (
+                      <div className="bg-[#0B1020] border border-slate-800 rounded-xl p-5 space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
+                          <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest">Thiết lập ánh xạ cột (Column Mapping)</h4>
+                          <span className="text-[10px] text-slate-500 italic">Hệ thống đã tự động quét và khớp các cột tương thích. Bạn có thể chỉnh sửa lại.</span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                          {[
+                            { key: "symbol", label: "Cột Symbol (Cặp tiền/Vàng)" },
+                            { key: "direction", label: "Cột Hướng (BUY/SELL)" },
+                            { key: "entry_price", label: "Cột Giá vào (Entry Price)" },
+                            { key: "stop_loss", label: "Cột Stop Loss (S/L)" },
+                            { key: "take_profit", label: "Cột Take Profit (T/P)" },
+                            { key: "profit_loss", label: "Cột Lợi Nhuận (Profit)" },
+                            { key: "opened_at", label: "Cột Ngày mở (Open Time)" },
+                            { key: "closed_at", label: "Cột Ngày đóng (Close Time)" }
+                          ].map(col => (
+                            <div key={col.key}>
+                              <label className="text-[9.5px] font-bold text-slate-400 block mb-1 truncate">{col.label}</label>
+                              <select
+                                value={(columnMapping as any)[col.key]}
+                                onChange={(e) => setColumnMapping({ ...columnMapping, [col.key]: e.target.value })}
+                                className="w-full bg-slate-900 border border-slate-800 px-2 py-1.5 rounded text-slate-200 outline-none text-[11px] focus:border-indigo-500 font-sans"
+                              >
+                                <option value="">-- Không ánh xạ --</option>
+                                {csvHeaders.map(h => (
+                                  <option key={h} value={h}>{h}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Setup step 3: Preview Table */}
+                    {rawRows.length > 0 && (
+                      <div className="flex-1 flex flex-col min-h-[250px] bg-[#0B1020] border border-slate-800 rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-900/40 flex justify-between items-center flex-shrink-0">
+                          <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider">
+                            Xem trước dữ liệu phân tích ({rawRows.filter((_, i) => importSelectedRows[i]).length} / {rawRows.length} lệnh được chọn)
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setImportSelectedRows(new Array(rawRows.length).fill(true))}
+                              className="text-[10px] text-indigo-400 hover:text-white font-semibold cursor-pointer"
+                            >
+                              Chọn tất cả
+                            </button>
+                            <span className="text-slate-700">|</span>
+                            <button
+                              type="button"
+                              onClick={() => setImportSelectedRows(new Array(rawRows.length).fill(false))}
+                              className="text-[10px] text-slate-400 hover:text-white font-semibold cursor-pointer"
+                            >
+                              Bỏ chọn tất cả
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-auto max-h-[300px]">
+                          <table className="w-full text-left text-[11px] font-mono">
+                            <thead className="bg-[#0B1020] text-slate-500 uppercase text-[9.5px] border-b border-slate-800 sticky top-0 z-10">
+                              <tr>
+                                <th className="p-2.5 text-center w-10">Chọn</th>
+                                <th className="p-2.5">Cặp</th>
+                                <th className="p-2.5">Mua/Bán</th>
+                                <th className="p-2.5">Giá vào</th>
+                                <th className="p-2.5">SL / TP</th>
+                                <th className="p-2.5">Lợi nhuận</th>
+                                <th className="p-2.5">Thời gian mở / đóng</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800 bg-[#121A2B]/20">
+                              {rawRows.map((row, idx) => {
+                                const symbol = row[columnMapping.symbol] || "Chưa khớp";
+                                const dirRaw = (row[columnMapping.direction] || "BUY").toUpperCase();
+                                const direction = (dirRaw.includes("SELL") || dirRaw.includes("SHORT")) ? "SELL" : "BUY";
+                                const entry = row[columnMapping.entry_price] || "0";
+                                const sl = row[columnMapping.stop_loss] || "0";
+                                const tp = row[columnMapping.take_profit] || "0";
+                                const profit = parseFloat(row[columnMapping.profit_loss]) || 0;
+                                const openTime = row[columnMapping.opened_at] || "-";
+                                const closeTime = row[columnMapping.closed_at] || "-";
+
+                                return (
+                                  <tr key={idx} className={`hover:bg-slate-800/10 transition-all ${importSelectedRows[idx] ? "" : "opacity-45 bg-[#0B1020]/20"}`}>
+                                    <td className="p-2.5 text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={importSelectedRows[idx] || false}
+                                        onChange={() => {
+                                          const copy = [...importSelectedRows];
+                                          copy[idx] = !copy[idx];
+                                          setImportSelectedRows(copy);
+                                        }}
+                                        className="cursor-pointer"
+                                      />
+                                    </td>
+                                    <td className="p-2.5 font-bold text-slate-200">{symbol}</td>
+                                    <td className="p-2.5">
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold ${direction === "BUY" ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>
+                                        {direction}
+                                      </span>
+                                    </td>
+                                    <td className="p-2.5 text-slate-300">@{entry}</td>
+                                    <td className="p-2.5 text-slate-400">
+                                      <div className="text-[10px]">SL: {sl || "Không cài ⚠️"}</div>
+                                      <div className="text-[10px]">TP: {tp || "Chưa cài"}</div>
+                                    </td>
+                                    <td className={`p-2.5 font-bold ${profit > 0 ? "text-emerald-400" : profit < 0 ? "text-rose-400" : "text-slate-400"}`}>
+                                      {profit > 0 ? "+" : ""}{profit.toLocaleString("en-US")}
+                                    </td>
+                                    <td className="p-2.5 text-slate-400 text-[10px] leading-relaxed">
+                                      <div>Mở: {openTime}</div>
+                                      <div>Đóng: {closeTime}</div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Modal Footer buttons */}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-850 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowImportTradesModal(false);
+                          setCsvFileText("");
+                          setCsvFileName("");
+                          setCsvHeaders([]);
+                          setRawRows([]);
+                        }}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg cursor-pointer"
+                      >
+                        Đóng
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isImporting || rawRows.length === 0 || !importAccountId}
+                        className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 disabled:from-slate-800 disabled:to-slate-800 disabled:opacity-40 text-white font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 shadow-lg shadow-indigo-950/20"
+                      >
+                        {isImporting ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Đang xử lý nhập...
+                          </>
+                        ) : (
+                          <>
+                            <span>Nhập dữ liệu lịch sử</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* POPUP MODAL FOR ADDING/EDITING MARKET NEWS */}
             {(showAddNewsModal || showEditNewsModal) && (
