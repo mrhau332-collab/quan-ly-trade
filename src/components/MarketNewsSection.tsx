@@ -43,7 +43,7 @@ export default function MarketNewsSection({
   onSyncClick,
   isSyncing
 }: MarketNewsSectionProps) {
-  const [filter, setFilter] = useState<"all" | "today" | "week" | "high">("all");
+  const [filter, setFilter] = useState<"all" | "high">("all");
   const [editingActualId, setEditingActualId] = useState<string | null>(null);
   const [quickActualVal, setQuickActualVal] = useState("");
 
@@ -89,19 +89,9 @@ export default function MarketNewsSection({
     const itemDate = new Date(item.datetime);
     const today = new Date();
     
-    // Reset hours to compare dates
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-
-    if (filter === "today") {
-      return itemDate >= startOfToday && itemDate <= endOfToday;
-    }
-    
-    if (filter === "week") {
-      // Within next 7 days and past 1 day
-      const startOfWeek = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
-      const endOfWeek = new Date(startOfToday.getTime() + 7 * 24 * 60 * 60 * 1000);
-      return itemDate >= startOfWeek && itemDate <= endOfWeek;
+    // Only show news of the current day (local timezone)
+    if (itemDate.toDateString() !== today.toDateString()) {
+      return false;
     }
 
     if (filter === "high") {
@@ -204,23 +194,7 @@ export default function MarketNewsSection({
                 filter === "all" ? "bg-slate-800 text-white font-bold" : "text-slate-400 hover:text-slate-200"
               }`}
             >
-              Tất cả
-            </button>
-            <button
-              onClick={() => setFilter("today")}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                filter === "today" ? "bg-slate-800 text-white font-bold" : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              Hôm nay
-            </button>
-            <button
-              onClick={() => setFilter("week")}
-              className={`px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer ${
-                filter === "week" ? "bg-slate-800 text-white font-bold" : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              Tuần này
+              Tất cả hôm nay
             </button>
             <button
               onClick={() => setFilter("high")}
