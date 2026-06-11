@@ -116,6 +116,193 @@ function generateMockActual(forecast: string, previous: string): string {
   return finalVal.toFixed(1);
 }
 
+// Helper functions to fetch Investing.com economic calendar and match events
+async function fetchInvestingActuals(): Promise<Array<{ title: string; country: string; actual: string; forecast: string; previous: string }>> {
+  try {
+    console.log("Fetching real-time actuals from Investing.com...");
+    const response = await fetch("https://www.investing.com/economic-calendar/", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    if (!response.ok) {
+      console.error("Investing.com fetch failed:", response.statusText);
+      return [];
+    }
+    const html = await response.text();
+    const rows = html.split('<tr class="datatable-v2_row__');
+    const parsedEvents = [];
+    
+    for (let i = 1; i < rows.length; i++) {
+      const rowHtml = rows[i].split('</tr>')[0];
+      
+      let country = "";
+      const countryMatch = rowHtml.match(/text-warren-gray-900">([A-Z]{2,3})<\/span>/) || 
+                           rowHtml.match(/flag-placeholder.*? font-bold.*?">([A-Z]{2,3})/) ||
+                           rowHtml.match(/flag-placeholder.*?">([A-Z]{2,3})/);
+                           
+      if (countryMatch) {
+        country = countryMatch[1];
+      } else {
+        if (rowHtml.includes("UnitedStates") || rowHtml.includes(" US ")) country = "US";
+        else if (rowHtml.includes("EuroZone") || rowHtml.includes(" EU ")) country = "EU";
+        else if (rowHtml.includes("UnitedKingdom") || rowHtml.includes(" UK ")) country = "UK";
+        else if (rowHtml.includes("Japan") || rowHtml.includes(" JP ")) country = "JP";
+      }
+      
+      const titleMatch = rowHtml.match(/class="text-link.*?<div class=".*?">(.*?)<\/div>/s);
+      if (!titleMatch) continue;
+      const title = titleMatch[1].replace(/<!-- -->/g, "").replace(/\s+/g, " ").trim();
+      
+      const cells = rowHtml.match(/align-end.*?dir="ltr">(.*?)<\/td>/gs);
+      let actual = "";
+      let forecast = "";
+      let previous = "";
+      
+      if (cells && cells.length >= 3) {
+        const cleanCellVal = (c: string) => {
+          const valMatch = c.match(/dir="ltr">(.*?)<\/td>/s);
+          if (!valMatch) return "";
+          return valMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
+        };
+        actual = cleanCellVal(cells[0]);
+        forecast = cleanCellVal(cells[1]);
+        previous = cleanCellVal(cells[2]);
+      } else {
+        const actMatch = rowHtml.match(/Act<!-- -->:.*?dir="ltr".*?>(.*?)<\/span>/s);
+        const consMatch = rowHtml.match(/Cons<!-- -->:.*?dir="ltr".*?>(.*?)<\/span>/s);
+        const prevMatch = rowHtml.match(/Prev\.<!-- -->:.*?dir="ltr".*?>(.*?)<\/span>/s);
+        
+        if (actMatch) actual = actMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
+        if (consMatch) forecast = consMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
+        if (prevMatch) previous = prevMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
+      }
+      
+      parsedEvents.push({ title, country, actual, forecast, previous });
+    }
+    console.log(`Successfully parsed ${parsedEvents.length} events from Investing.com.`);
+    return parsedEvents;
+  } catch (err) {
+    console.error("Error fetching/parsing Investing.com calendar:", err);
+    return [];
+  }
+}
+
+async function fetchTradingEconomicsActuals(): Promise<Array<{ title: string; country: string; actual: string; forecast: string; previous: string }>> {
+  try {
+    console.log("Fetching real-time actuals from Trading Economics...");
+    const response = await fetch("https://tradingeconomics.com/calendar", {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      }
+    });
+    if (!response.ok) {
+      console.error("Trading Economics fetch failed:", response.statusText);
+      return [];
+    }
+    const html = await response.text();
+    const rows = html.split("<tr");
+    const parsedEvents = [];
+    let currentDateStr = "";
+
+    for (let i = 1; i < rows.length; i++) {
+      const rowContent = rows[i];
+      
+      // Check if this row is a date header
+      const headerMatch = rowContent.match(/<th colspan=['"]3['"].*?>(.*?)<\/th>/s);
+      if (headerMatch) {
+        currentDateStr = headerMatch[1].replace(/\s+/g, " ").trim();
+        continue;
+      }
+
+      // Look for calendar-event
+      const titleMatch = rowContent.match(/class=['"]calendar-event['"].*?>(.*?)<\/a>/);
+      if (!titleMatch) continue;
+      const title = titleMatch[1].trim();
+
+      // Look for country/calendar-iso
+      const countryMatch = rowContent.match(/class=['"]calendar-iso['"].*?>(.*?)<\/td>/);
+      const country = countryMatch ? countryMatch[1].trim() : "";
+
+      // Extract values
+      const actualMatch = rowContent.match(/id=['"]actual['"].*?>(.*?)<\/(?:span|a)>/);
+      const actual = actualMatch ? actualMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim() : "";
+
+      const previousMatch = rowContent.match(/id=['"]previous['"].*?>(.*?)<\/(?:span|a)>/);
+      const previous = previousMatch ? previousMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim() : "";
+
+      const consensusMatch = rowContent.match(/id=['"]consensus['"].*?>(.*?)<\/(?:span|a)>/);
+      const consensus = consensusMatch ? consensusMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim() : "";
+
+      const forecastMatch = rowContent.match(/id=['"]forecast['"].*?>(.*?)<\/(?:span|a)>/);
+      const forecast = forecastMatch ? forecastMatch[1].replace(/<\/?[^>]+(>|$)/g, "").trim() : "";
+
+      parsedEvents.push({
+        title,
+        country,
+        actual,
+        forecast: forecast || consensus,
+        previous
+      });
+    }
+    console.log(`Successfully parsed ${parsedEvents.length} events from Trading Economics.`);
+    return parsedEvents;
+  } catch (err) {
+    console.error("Error fetching/parsing Trading Economics calendar:", err);
+    return [];
+  }
+}
+
+function matchEvent(dbTitle: string, invTitle: string, invCountry: string): boolean {
+  const cleanDb = dbTitle.toLowerCase();
+  const cleanInv = invTitle.toLowerCase();
+  
+  const dbCountryMatch = cleanDb.match(/\[([a-z]{3})\]/);
+  const dbCountry = dbCountryMatch ? dbCountryMatch[1] : "usd";
+  
+  const invCountryLower = invCountry.toLowerCase();
+  const countryMatches = 
+    (dbCountry === "usd" && (invCountryLower === "us" || invCountryLower === "united states")) ||
+    (dbCountry === "eur" && (invCountryLower === "eu" || invCountryLower === "euro zone" || invCountryLower === "germany" || invCountryLower === "france" || invCountryLower === "ea" || invCountryLower === "euro area")) ||
+    (dbCountry === "gbp" && (invCountryLower === "uk" || invCountryLower === "united kingdom" || invCountryLower === "gb")) ||
+    (dbCountry === "jpy" && (invCountryLower === "jp" || invCountryLower === "japan"));
+
+  if (!countryMatches) return false;
+
+  if (cleanDb.includes("unemployment claims") && (cleanInv.includes("jobless claims") || cleanInv.includes("unemployment claims"))) {
+    return true;
+  }
+  if (cleanDb.includes("core cpi m/m") && cleanInv.includes("core cpi") && (cleanInv.includes("mom") || cleanInv.includes("m/m"))) {
+    return true;
+  }
+  if (cleanDb.includes("core cpi y/y") && cleanInv.includes("core cpi") && (cleanInv.includes("yoy") || cleanInv.includes("y/y"))) {
+    return true;
+  }
+  if (cleanDb.includes("cpi m/m") && !cleanInv.includes("core") && cleanInv.includes("cpi") && (cleanInv.includes("mom") || cleanInv.includes("m/m"))) {
+    return true;
+  }
+  if (cleanDb.includes("cpi y/y") && !cleanInv.includes("core") && cleanInv.includes("cpi") && (cleanInv.includes("yoy") || cleanInv.includes("y/y"))) {
+    return true;
+  }
+  if (cleanDb.includes("core ppi m/m") && cleanInv.includes("core ppi") && (cleanInv.includes("mom") || cleanInv.includes("m/m"))) {
+    return true;
+  }
+  if (cleanDb.includes("ppi m/m") && !cleanInv.includes("core") && cleanInv.includes("ppi") && (cleanInv.includes("mom") || cleanInv.includes("m/m"))) {
+    return true;
+  }
+  if (cleanDb.includes("refinancing rate") && (cleanInv.includes("interest rate") || cleanInv.includes("refinancing rate"))) {
+    return true;
+  }
+
+  if (cleanDb.includes("gdp") && cleanInv.includes("gdp")) {
+    return (cleanDb.includes("m/m") && cleanInv.includes("mom")) || 
+           (cleanDb.includes("q/q") && cleanInv.includes("qoq")) ||
+           (cleanDb.includes("y/y") && cleanInv.includes("yoy"));
+  }
+
+  return false;
+}
+
 let lastSyncTime = 0;
 let lastSyncResult = { added: 0, updated: 0 };
 
@@ -138,6 +325,18 @@ async function syncMarketNewsFromForexFactory(force: boolean = false) {
     if (!Array.isArray(feedData)) {
       throw new Error("Invalid response format from faireconomy.media, expected array");
     }
+
+    // Fetch real-time actual values from Trading Economics and Investing.com in parallel
+    const [investingEvents, tradingEconomicsEvents] = await Promise.all([
+      fetchInvestingActuals().catch(err => {
+        console.error("Failed to fetch Investing.com calendar in sync:", err);
+        return [];
+      }),
+      fetchTradingEconomicsActuals().catch(err => {
+        console.error("Failed to fetch Trading Economics calendar in sync:", err);
+        return [];
+      })
+    ]);
 
     const db = await readDB();
     if (!db.market_news) {
@@ -173,11 +372,22 @@ async function syncMarketNewsFromForexFactory(force: boolean = false) {
       const previousVal = feedItem.previous || "";
       const actualVal = feedItem.actual || "";
 
+      // Match against both sources, prioritizing Trading Economics
+      const matchedTe = tradingEconomicsEvents.find(e => matchEvent(title, e.title, e.country));
+      const matchedInv = investingEvents.find(e => matchEvent(title, e.title, e.country));
+      const matchedSource = matchedTe || matchedInv;
+
       if (existingIdx !== -1) {
         const old = db.market_news[existingIdx];
-        const finalForecast = forecastVal || old.forecast || "";
-        const finalPrevious = previousVal || old.previous || "";
+        
+        // Use feed forecast/previous, fall back to matched source, then fall back to old value
+        const finalForecast = forecastVal || (matchedSource ? matchedSource.forecast : "") || old.forecast || "";
+        const finalPrevious = previousVal || (matchedSource ? matchedSource.previous : "") || old.previous || "";
+        
         let finalActual = actualVal || old.actual || "";
+        if (matchedSource && matchedSource.actual) {
+          finalActual = matchedSource.actual;
+        }
 
         // If the event has passed and actual is still empty, simulate it
         if (isPast && !finalActual) {
@@ -206,11 +416,18 @@ async function syncMarketNewsFromForexFactory(force: boolean = false) {
         updated++;
       } else {
         const impact = impactStr.toUpperCase();
+        
+        const finalForecast = forecastVal || (matchedSource ? matchedSource.forecast : "") || "";
+        const finalPrevious = previousVal || (matchedSource ? matchedSource.previous : "") || "";
+
         let finalActual = actualVal || "";
+        if (matchedSource && matchedSource.actual) {
+          finalActual = matchedSource.actual;
+        }
 
         // If the event has passed and actual is still empty, simulate it
         if (isPast && !finalActual) {
-          finalActual = generateMockActual(forecastVal, previousVal);
+          finalActual = generateMockActual(finalForecast, finalPrevious);
         }
 
         // Analyze Gold Impact
@@ -219,8 +436,8 @@ async function syncMarketNewsFromForexFactory(force: boolean = false) {
           country,
           impactStr,
           finalActual,
-          forecastVal,
-          previousVal
+          finalForecast,
+          finalPrevious
         );
 
         db.market_news.push({
@@ -228,9 +445,9 @@ async function syncMarketNewsFromForexFactory(force: boolean = false) {
           title,
           impact: impact as any,
           datetime,
-          forecast: forecastVal,
+          forecast: finalForecast,
           actual: finalActual,
-          previous: previousVal,
+          previous: finalPrevious,
           gold_impact_direction: analysis.direction,
           description: analysis.description,
           created_at: new Date().toISOString()
