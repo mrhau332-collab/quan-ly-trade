@@ -68,7 +68,8 @@ import {
   Wallet,
   Coins,
   Landmark,
-  PiggyBank
+  PiggyBank,
+  Save
 } from "lucide-react";
 
 export default function App() {
@@ -560,6 +561,87 @@ export default function App() {
       }
     }
   }, [activeUser, dailyJournalForm.date]);
+
+  // Load draft values for all forms on mount
+  useEffect(() => {
+    const loadDraft = (key: string, setter: (val: any) => void) => {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          setter(JSON.parse(saved));
+        } catch (e) {
+          console.error("Error loading draft for " + key, e);
+        }
+      }
+    };
+    loadDraft("tg_draft_openTradeForm", setOpenTradeForm);
+    loadDraft("tg_draft_closeTradeForm", setCloseTradeForm);
+    loadDraft("tg_draft_editTradeForm", setEditTradeForm);
+    loadDraft("tg_draft_accountForm", setAccountForm);
+    loadDraft("tg_draft_userForm", setUserForm);
+    loadDraft("tg_draft_reviewForm", setReviewForm);
+    loadDraft("tg_draft_newsForm", setNewsForm);
+    loadDraft("tg_draft_regForm", setRegForm);
+    loadDraft("tg_draft_incentiveForm", setIncentiveForm);
+    loadDraft("tg_draft_fundTxForm", setFundTxForm);
+  }, []);
+
+  // Auto-save form drafts to localStorage on changes
+  useEffect(() => {
+    localStorage.setItem("tg_draft_openTradeForm", JSON.stringify(openTradeForm));
+  }, [openTradeForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_closeTradeForm", JSON.stringify(closeTradeForm));
+  }, [closeTradeForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_editTradeForm", JSON.stringify(editTradeForm));
+  }, [editTradeForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_accountForm", JSON.stringify(accountForm));
+  }, [accountForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_userForm", JSON.stringify(userForm));
+  }, [userForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_reviewForm", JSON.stringify(reviewForm));
+  }, [reviewForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_newsForm", JSON.stringify(newsForm));
+  }, [newsForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_regForm", JSON.stringify(regForm));
+  }, [regForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_incentiveForm", JSON.stringify(incentiveForm));
+  }, [incentiveForm]);
+
+  useEffect(() => {
+    localStorage.setItem("tg_draft_fundTxForm", JSON.stringify(fundTxForm));
+  }, [fundTxForm]);
+
+  const handleSaveAllDrafts = () => {
+    localStorage.setItem("tg_draft_openTradeForm", JSON.stringify(openTradeForm));
+    localStorage.setItem("tg_draft_closeTradeForm", JSON.stringify(closeTradeForm));
+    localStorage.setItem("tg_draft_editTradeForm", JSON.stringify(editTradeForm));
+    localStorage.setItem("tg_draft_accountForm", JSON.stringify(accountForm));
+    localStorage.setItem("tg_draft_userForm", JSON.stringify(userForm));
+    localStorage.setItem("tg_draft_reviewForm", JSON.stringify(reviewForm));
+    localStorage.setItem("tg_draft_dailyJournalForm", JSON.stringify(dailyJournalForm));
+    localStorage.setItem("tg_draft_newsForm", JSON.stringify(newsForm));
+    localStorage.setItem("tg_draft_regForm", JSON.stringify(regForm));
+    localStorage.setItem("tg_draft_incentiveForm", JSON.stringify(incentiveForm));
+    localStorage.setItem("tg_draft_fundTxForm", JSON.stringify(fundTxForm));
+    
+    showCustomAlert("Thành công", "Đã lưu lại toàn bộ dữ liệu bản nháp của các biểu mẫu vào trình duyệt!", "success");
+  };
 
   // Handle open trade submit
   const handleOpenTradeSubmit = async (e: React.FormEvent) => {
@@ -1786,6 +1868,16 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {/* Save All Drafts button */}
+            <button
+              onClick={handleSaveAllDrafts}
+              className="p-2.5 bg-[#121A2B] border border-slate-800 rounded-lg hover:border-slate-700 text-slate-400 hover:text-emerald-400 transition-all cursor-pointer flex items-center gap-1.5"
+              title="Lưu tất cả bản nháp đang nhập dở"
+            >
+              <Save className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs text-slate-300 font-semibold hidden md:inline">Lưu dữ liệu</span>
+            </button>
 
             {/* Refresh Database button */}
             <button
