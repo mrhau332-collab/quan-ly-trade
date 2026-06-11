@@ -134,32 +134,59 @@ async function syncMarketNewsFromForexFactory(force: boolean = false) {
         (n: any) => n.title === title && n.datetime === datetime
       );
 
+      const forecastVal = feedItem.forecast || "";
+      const previousVal = feedItem.previous || "";
+      const actualVal = feedItem.actual || "";
+
       if (existingIdx !== -1) {
         const old = db.market_news[existingIdx];
+        const finalForecast = forecastVal || old.forecast || "";
+        const finalPrevious = previousVal || old.previous || "";
+        const finalActual = actualVal || old.actual || "";
+
+        // Re-analyze Gold Impact
+        const analysis = analyzeGoldImpact(
+          title,
+          country,
+          impactStr,
+          finalActual,
+          finalForecast,
+          finalPrevious
+        );
+
         db.market_news[existingIdx] = {
           ...old,
-          forecast: feedItem.forecast || old.forecast || "",
-          previous: feedItem.previous || old.previous || "",
+          forecast: finalForecast,
+          previous: finalPrevious,
           impact: impactStr.toUpperCase() as any,
-          // Keep user-entered actual/direction/description
-          actual: old.actual || "",
-          gold_impact_direction: old.gold_impact_direction || (country === "USD" && impactStr === "High" ? "VOLATILE" : "NEUTRAL"),
-          description: old.description || "Tin tức vĩ mô tự động cập nhật từ Forex Factory."
+          actual: finalActual,
+          gold_impact_direction: analysis.direction,
+          description: analysis.description
         };
         updated++;
       } else {
         const impact = impactStr.toUpperCase();
-        const gold_impact_direction = (country === "USD" && impact === "HIGH") ? "VOLATILE" : "NEUTRAL";
+        
+        // Analyze Gold Impact
+        const analysis = analyzeGoldImpact(
+          title,
+          country,
+          impactStr,
+          actualVal,
+          forecastVal,
+          previousVal
+        );
+
         db.market_news.push({
           id: "news_" + generateUUID(),
           title,
           impact: impact as any,
           datetime,
-          forecast: feedItem.forecast || "",
-          actual: "",
-          previous: feedItem.previous || "",
-          gold_impact_direction: gold_impact_direction as any,
-          description: "Tin tức vĩ mô tự động cập nhật từ Forex Factory.",
+          forecast: forecastVal,
+          actual: actualVal,
+          previous: previousVal,
+          gold_impact_direction: analysis.direction,
+          description: analysis.description,
           created_at: new Date().toISOString()
         });
         added++;
@@ -438,7 +465,100 @@ function generateUUID() {
   return Math.random().toString(36).substring(2, 9) + "_" + Date.now();
 }
 
+function analyzeGoldImpact(
+  title: string,
+  country: string,
+  impact: string,
+  actual: string,
+  forecast: string,
+  previous: string
+): { direction: "UP" | "DOWN" | "VOLATILE" | "NEUTRAL"; description: string } {
+  const normTitle = title.toLowerCase();
+  const impactUpper = impact.toUpperCase();
+  const isHighImpact = impactUpper === "HIGH" || impactUpper === "RED";
+  
+  if (country !== "USD") {
+    return {
+      direction: "NEUTRAL",
+      description: `Tin tức vĩ mô [${country}] ảnh hưởng gián tiếp đến tỷ giá USD và giá Vàng. Thường có tác động trung hòa hoặc biến động nhẹ.`
+    };
+  }
+
+  if (!actual) {
+    let scenarioStr = "";
+    if (normTitle.includes("unemployment") || normTitle.includes("jobless") || normTitle.includes("claims")) {
+      scenarioStr = `Nhận định trước tin (Ảnh hưởng ${isHighImpact ? "Mạnh" : "Vừa"}):\n` +
+        `- Nếu Thực tế > Dự báo (${forecast || "kỳ trước " + previous}): Lao động xấu đi -> USD giảm -> VÀNG TĂNG 📈\n` +
+        `- Nếu Thực tế < Dự báo (${forecast || "kỳ trước " + previous}): Lao động tốt lên -> USD tăng -> VÀNG GIẢM 📉`;
+    } else {
+      scenarioStr = `Nhận định trước tin (Ảnh hưởng ${isHighImpact ? "Mạnh" : "Vừa"}):\n` +
+        `- Nếu Thực tế > Dự báo (${forecast || "kỳ trước " + previous}): Kinh tế mạnh lên/lạm phát tăng -> USD tăng -> VÀNG GIẢM 📉\n` +
+        `- Nếu Thực tế < Dự báo (${forecast || "kỳ trước " + previous}): Kinh tế yếu đi/lạm phát giảm -> USD giảm -> VÀNG TĂNG 📈`;
+    }
+    return {
+      direction: isHighImpact ? "VOLATILE" : "NEUTRAL",
+      description: scenarioStr
+    };
+  }
+
+  const parseVal = (s: string) => {
+    if (!s) return null;
+    const cleaned = s.replace(/[^0-9.-]/g, "");
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? null : parsed;
+  };
+
+  const actNum = parseVal(actual);
+  const foreNum = parseVal(forecast);
+  const prevNum = parseVal(previous);
+
+  const compareNum = foreNum !== null ? foreNum : prevNum;
+  
+  if (actNum === null || compareNum === null) {
+    return {
+      direction: isHighImpact ? "VOLATILE" : "NEUTRAL",
+      description: `Tin đã công bố: Thực tế là ${actual} (Dự báo: ${forecast || "-"}). Biến động giá Vàng khó lường do thiếu dữ liệu so sánh chuẩn.`
+    };
+  }
+
+  const diff = actNum - compareNum;
+  const isBetter = diff > 0;
+  const isUnchanged = Math.abs(diff) < 0.0001;
+
+  let direction: "UP" | "DOWN" | "VOLATILE" | "NEUTRAL" = "NEUTRAL";
+  let explanation = "";
+
+  const isUnemployment = normTitle.includes("unemployment") || normTitle.includes("jobless") || normTitle.includes("claims");
+
+  if (isUnemployment) {
+    if (isUnchanged) {
+      direction = "NEUTRAL";
+      explanation = `Số liệu thực tế (${actual}) bằng với dự báo (${forecast || previous}). Thị trường ít biến động đột biến, giá Vàng đi ngang.`;
+    } else if (isBetter) {
+      direction = "UP";
+      explanation = `Đơn trợ cấp thất nghiệp tăng (${actual} > ${forecast || previous}), thị trường lao động suy yếu. USD giảm mạnh, VÀNG TĂNG 📈.`;
+    } else {
+      direction = "DOWN";
+      explanation = `Đơn trợ cấp thất nghiệp giảm (${actual} < ${forecast || previous}), thị trường lao động khả quan. USD tăng mạnh, VÀNG GIẢM 📉.`;
+    }
+  } else {
+    if (isUnchanged) {
+      direction = "NEUTRAL";
+      explanation = `Số liệu thực tế (${actual}) bằng với dự báo (${forecast || previous}). Thị trường ít biến động đột biến, giá Vàng đi ngang.`;
+    } else if (isBetter) {
+      direction = "DOWN";
+      explanation = `Chỉ số vĩ mô tốt hơn kỳ vọng (${actual} > ${forecast || previous}). USD tăng mạnh, gây áp lực ép giá VÀNG GIẢM 📉.`;
+    } else {
+      direction = "UP";
+      explanation = `Chỉ số vĩ mô xấu hơn kỳ vọng (${actual} < ${forecast || previous}). USD suy yếu rộng rãi, hỗ trợ đẩy giá VÀNG TĂNG 📈.`;
+    }
+  }
+
+  return { direction, description: `Phân tích sau tin:\n${explanation}` };
+}
+
 /**
+
  * ----------------- API ENDPOINTS -----------------
  */
 
@@ -1592,6 +1712,19 @@ app.post("/api/market-news", async (req, res) => {
       db.market_news = [];
     }
 
+    const countryMatch = title.match(/\[([A-Z]{3})\]/);
+    const country = countryMatch ? countryMatch[1] : "USD";
+
+    let finalDirection = gold_impact_direction;
+    let finalDescription = description || "";
+
+    // Auto-analyze if description is missing or is the default/automatic text
+    if (!description || description.trim() === "" || description.includes("tự động cập nhật")) {
+      const analysis = analyzeGoldImpact(title, country, impact, actual || "", forecast || "", previous || "");
+      finalDirection = analysis.direction;
+      finalDescription = analysis.description;
+    }
+
     if (id) {
       // Edit mode
       const idx = db.market_news.findIndex((n: any) => n.id === id);
@@ -1604,8 +1737,8 @@ app.post("/api/market-news", async (req, res) => {
           forecast: forecast || "",
           actual: actual || "",
           previous: previous || "",
-          gold_impact_direction,
-          description: description || ""
+          gold_impact_direction: finalDirection,
+          description: finalDescription
         };
         await writeDB(db);
         return res.json(db.market_news[idx]);
@@ -1621,8 +1754,8 @@ app.post("/api/market-news", async (req, res) => {
       forecast: forecast || "",
       actual: actual || "",
       previous: previous || "",
-      gold_impact_direction,
-      description: description || "",
+      gold_impact_direction: finalDirection,
+      description: finalDescription,
       created_at: new Date().toISOString()
     };
     db.market_news.push(newNews);
@@ -1649,7 +1782,17 @@ app.put("/api/market-news/:id/actual", async (req, res) => {
       return res.status(404).json({ error: "News event not found." });
     }
 
+    const item = db.market_news[idx];
+    const countryMatch = item.title.match(/\[([A-Z]{3})\]/);
+    const country = countryMatch ? countryMatch[1] : "USD";
+
+    // Auto-analyze when actual is updated
+    const analysis = analyzeGoldImpact(item.title, country, item.impact, actual || "", item.forecast || "", item.previous || "");
+
     db.market_news[idx].actual = actual || "";
+    db.market_news[idx].gold_impact_direction = analysis.direction;
+    db.market_news[idx].description = analysis.description;
+
     await writeDB(db);
     res.json(db.market_news[idx]);
   } catch (error: any) {

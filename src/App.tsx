@@ -99,6 +99,7 @@ export default function App() {
   const [activeUser, setActiveUser] = useState<User | null>(null);
   const activeUserRef = useRef<User | null>(null);
   activeUserRef.current = activeUser;
+  const journalLastLoadedKeyRef = useRef<string>("");
 
   // Custom visual confirm and alert states
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -500,6 +501,24 @@ export default function App() {
 
   // Sync journal formulation for date change
   const handleJournalDateChange = (dateVal: string) => {
+    if (!activeUser) return;
+    
+    const currentKey = `${activeUser.id}_${dateVal}`;
+    journalLastLoadedKeyRef.current = currentKey;
+
+    // Check draft first
+    const draftKey = `tg_draft_journal_${activeUser.id}_${dateVal}`;
+    const draftStr = localStorage.getItem(draftKey);
+    if (draftStr) {
+      try {
+        const draft = JSON.parse(draftStr);
+        setDailyJournalForm(draft);
+        return;
+      } catch (e) {
+        console.error("Error parsing journal draft:", e);
+      }
+    }
+
     const existing = journals.find(
       (j) => j.user_id === activeUser?.id && j.date === dateVal
     );
@@ -526,11 +545,21 @@ export default function App() {
     }
   };
 
+  const handleSaveJournalDraft = () => {
+    if (!activeUser) return;
+    const draftKey = `tg_draft_journal_${activeUser.id}_${dailyJournalForm.date}`;
+    localStorage.setItem(draftKey, JSON.stringify(dailyJournalForm));
+    showCustomAlert("Thành công", "Đã lưu bản nháp nhật ký ngày vào trình duyệt!", "success");
+  };
+
   useEffect(() => {
     if (activeUser) {
-      handleJournalDateChange(dailyJournalForm.date);
+      const currentKey = `${activeUser.id}_${dailyJournalForm.date}`;
+      if (currentKey !== journalLastLoadedKeyRef.current) {
+        handleJournalDateChange(dailyJournalForm.date);
+      }
     }
-  }, [activeUser, journals]);
+  }, [activeUser, dailyJournalForm.date]);
 
   // Handle open trade submit
   const handleOpenTradeSubmit = async (e: React.FormEvent) => {
@@ -849,6 +878,10 @@ export default function App() {
         const errData = await resp.json();
         throw new Error(errData.error || "Can't post journal");
       }
+
+      // Clear draft from localStorage
+      const draftKey = `tg_draft_journal_${activeUser.id}_${dailyJournalForm.date}`;
+      localStorage.removeItem(draftKey);
 
       await fetchDB();
       showCustomAlert("Thành công", "Đã lưu trữ nhật ký ngày và tích hóa điểm kỷ luật cho hôm nay!", "success");
@@ -2268,12 +2301,21 @@ export default function App() {
                     />
                   </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white rounded-lg transition-all cursor-pointer"
-                  >
-                    Ghi nhật ký & Nhận thưởng +2đ
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSaveJournalDraft}
+                      className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 rounded-lg transition-all border border-slate-700 cursor-pointer text-center"
+                    >
+                      Lưu nháp 💾
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-[2] py-2 bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white rounded-lg transition-all cursor-pointer text-center"
+                    >
+                      Ghi nhật ký (+2đ)
+                    </button>
+                  </div>
                 </form>
               </div>
 
