@@ -77,23 +77,17 @@ export default function AccountCards({ accounts, trades, onEditAccount, onDelete
                 <h3 className="text-base font-bold text-white mt-1.5" id={`acct-name-${acct.id}`}>
                   {acct.name}
                 </h3>
-                <div className="flex flex-col gap-1.5 mt-1.5 text-[10.5px] text-slate-400 font-semibold select-none leading-none" id={`acct-meta-${acct.id}`}>
-                  {(acct.purchase_price !== undefined && acct.purchase_price !== null) ? (
-                    <div className="flex items-center gap-1">
-                      <span>Chi phí mua:</span>
-                      <span className="text-sky-400 font-bold font-mono">{(acct.purchase_price).toLocaleString("vi-VN")} ₫</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-1">
-                      <span>Chi phí mua:</span>
-                      <span className="font-mono text-slate-500">Chưa cấu hình</span>
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <span>Vốn tài khoản:</span>
-                    <span className="text-indigo-400 font-bold font-mono">{formatCurrency(acct.starting_balance, acct.currency)}</span>
+                {(acct.purchase_price !== undefined && acct.purchase_price !== null) ? (
+                  <div className="text-[10.5px] text-slate-400 mt-1 select-none font-semibold flex items-center gap-1.5 leading-none" id={`acct-pp-${acct.id}`}>
+                    <span>Vốn mua:</span>
+                    <span className="text-sky-400 font-bold font-mono">{(acct.purchase_price).toLocaleString("vi-VN")} ₫</span>
                   </div>
-                </div>
+                ) : (
+                  <div className="text-[10.5px] text-slate-500 mt-1 select-none font-semibold flex items-center gap-1.5 leading-none" id={`acct-pp-${acct.id}`}>
+                    <span>Vốn mua:</span>
+                    <span className="font-mono">Chưa cấu hình</span>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1.5" id={`acct-actions-box-${acct.id}`}>
                 {onEditAccount && (
@@ -121,16 +115,22 @@ export default function AccountCards({ accounts, trades, onEditAccount, onDelete
             </div>
 
             {/* Balances */}
-            <div className="mt-5 grid grid-cols-2 gap-4 border-b border-slate-800 pb-4" id={`acct-balances-grid-${acct.id}`}>
+            <div className="mt-5 grid grid-cols-3 gap-2 border-b border-slate-800 pb-4" id={`acct-balances-grid-${acct.id}`}>
+              <div id={`acct-start-container-${acct.id}`}>
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block" id={`acct-start-lbl-${acct.id}`}>VỐN ĐẦU (START)</span>
+                <span className="text-sm font-bold font-mono text-slate-300 mt-1 block" id={`acct-start-val-${acct.id}`}>
+                  {formatCurrency(acct.starting_balance, acct.currency)}
+                </span>
+              </div>
               <div id={`acct-bal-container-${acct.id}`}>
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block" id={`acct-bal-lbl-${acct.id}`}>SỐ DƯ (BALANCE)</span>
-                <span className="text-lg font-bold font-mono text-white mt-1 block" id={`acct-bal-val-${acct.id}`}>
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block" id={`acct-bal-lbl-${acct.id}`}>SỐ DƯ (BALANCE)</span>
+                <span className="text-sm font-bold font-mono text-white mt-1 block" id={`acct-bal-val-${acct.id}`}>
                   {formatCurrency(acct.current_balance, acct.currency)}
                 </span>
               </div>
               <div id={`acct-eq-container-${acct.id}`}>
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block" id={`acct-eq-lbl-${acct.id}`}>TÀI SẢN (EQUITY)</span>
-                <span className="text-lg font-bold font-mono text-indigo-400 mt-1 block" id={`acct-eq-val-${acct.id}`}>
+                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block" id={`acct-eq-lbl-${acct.id}`}>TÀI SẢN RÒNG (EQUITY)</span>
+                <span className="text-sm font-bold font-mono text-indigo-400 mt-1 block" id={`acct-eq-val-${acct.id}`}>
                   {formatCurrency(acct.equity, acct.currency)}
                 </span>
               </div>
