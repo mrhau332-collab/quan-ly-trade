@@ -172,7 +172,11 @@ export default function AccountCards({ accounts, trades, onEditAccount, onDelete
             <div className="mt-4" id={`acct-risk-params-${acct.id}`}>
               <div className="flex justify-between text-[11px] text-slate-400 font-semibold mb-1" id={`acct-risk-hdr-${acct.id}`}>
                 <span className="flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> GIỚI HẠN SỤT GIẢM (MAX DD)</span>
-                <span className="font-mono">{acct.max_drawdown_limit ? formatCurrency(acct.max_drawdown_limit, acct.currency) : "N/A"}</span>
+                <span className="font-mono">
+                  {acct.max_drawdown_limit 
+                    ? `${formatCurrency(acct.max_drawdown_limit, acct.currency)}${acct.starting_balance > 0 ? ` (${((acct.max_drawdown_limit / acct.starting_balance) * 100).toFixed(1)}%)` : ""}` 
+                    : "N/A"}
+                </span>
               </div>
               <div className="w-full bg-[#0B1020] h-1.5 rounded-full overflow-hidden" id={`acct-progress-bar-bg-${acct.id}`}>
                 <div

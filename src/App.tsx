@@ -1335,6 +1335,7 @@ export default function App() {
         account_type: resolvedType as any,
         starting_balance: parseFloat(accountForm.starting_balance) || 0,
         current_balance: parseFloat(accountForm.current_balance) || 0,
+        equity: parseFloat(accountForm.current_balance) || 0,
         daily_drawdown_limit: parseFloat(accountForm.daily_drawdown_limit) || 0,
         max_drawdown_limit: parseFloat(accountForm.max_drawdown_limit) || 0,
         purchase_price: parseFloat(accountForm.purchase_price) || 0
@@ -4545,7 +4546,7 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Giới hạn sụt giảm ngày %</label>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Sụt giảm ngày (Số tiền - VD: 5000)</label>
                   <input
                     type="number"
                     step="any"
@@ -4556,7 +4557,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Sụt giảm tối đa %</label>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Sụt giảm tối đa (Số tiền - VD: 10000)</label>
                   <input
                     type="number"
                     step="any"
@@ -4726,7 +4727,7 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Hạn sụt giảm ngày (%)</label>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Hạn sụt giảm ngày (Số tiền - VD: 5000)</label>
                   <input
                     type="number"
                     step="any"
@@ -4737,7 +4738,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Hạn sụt giảm tối đa (%)</label>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Hạn sụt giảm tối đa (Số tiền - VD: 10000)</label>
                   <input
                     type="number"
                     step="any"

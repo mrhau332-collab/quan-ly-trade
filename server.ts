@@ -1719,7 +1719,7 @@ app.put("/api/accounts/:id", async (req, res) => {
       owner_id: owner_id !== undefined ? owner_id : prev.owner_id,
       starting_balance: starting_balance !== undefined ? Number(starting_balance) : prev.starting_balance,
       current_balance: current_balance !== undefined ? Number(current_balance) : prev.current_balance,
-      equity: equity !== undefined ? Number(equity) : prev.equity,
+      equity: equity !== undefined ? Number(equity) : (current_balance !== undefined ? Number(current_balance) : prev.equity),
       daily_drawdown_limit: daily_drawdown_limit !== undefined ? Number(daily_drawdown_limit) : prev.daily_drawdown_limit,
       max_drawdown_limit: max_drawdown_limit !== undefined ? Number(max_drawdown_limit) : prev.max_drawdown_limit,
       status: status !== undefined ? status : prev.status,
