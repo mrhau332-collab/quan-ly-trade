@@ -680,6 +680,7 @@ async function readDB() {
           notifications: [],
           regulations: getDefaultRegulations(),
           market_news: getDefaultMarketNews(),
+          loans: [],
           shared_fund: {
             balance: 10000000,
             currency: "VND",
@@ -1505,6 +1506,7 @@ app.post("/api/trades/import", async (req, res) => {
     }
 
     let importedCount = 0;
+    let skippedCount = 0;
     let addedMistakesCount = 0;
     let addedPenaltiesCount = 0;
 
@@ -1516,6 +1518,31 @@ app.post("/api/trades/import", async (req, res) => {
       const take_profit = Number(t.take_profit || 0);
       const profit_loss = Number(t.profit_loss || 0);
       
+      const opened_at = t.opened_at ? new Date(t.opened_at).toISOString() : new Date().toISOString();
+      const closed_at = t.closed_at ? new Date(t.closed_at).toISOString() : new Date().toISOString();
+
+      // Check for duplicates: same account, symbol, direction, entry price, profit/loss, and closed_at time within 5s
+      const isDuplicate = db.trades.some((existingTrade: any) => {
+        if (existingTrade.account_id !== account_id) return false;
+        if (existingTrade.symbol !== symbol) return false;
+        if (existingTrade.direction !== direction) return false;
+        if (Math.abs(existingTrade.entry_price - entry_price) > 0.00001) return false;
+        if (Math.abs(existingTrade.profit_loss - profit_loss) > 0.01) return false;
+        
+        // Compare close times (within 5 seconds)
+        if (existingTrade.closed_at && closed_at) {
+          const tClosed = new Date(closed_at).getTime();
+          const exClosed = new Date(existingTrade.closed_at).getTime();
+          if (Math.abs(tClosed - exClosed) > 5000) return false;
+        }
+        return true;
+      });
+
+      if (isDuplicate) {
+        skippedCount++;
+        continue;
+      }
+
       // Fallback risk amount: 0.5% of balance or standard 500
       const risk_amount = Number(t.risk_amount || (account.current_balance * 0.005) || 500);
 
@@ -1523,9 +1550,6 @@ app.post("/api/trades/import", async (req, res) => {
       const tpDiff = Math.abs(take_profit - entry_price);
       const slDiff = Math.abs(entry_price - stop_loss);
       const rrRatio = slDiff > 0 ? Number((tpDiff / slDiff).toFixed(2)) : 0;
-
-      const opened_at = t.opened_at ? new Date(t.opened_at).toISOString() : new Date().toISOString();
-      const closed_at = t.closed_at ? new Date(t.closed_at).toISOString() : new Date().toISOString();
 
       let result = TradeResult.BE;
       if (profit_loss > 0) result = TradeResult.WIN;
@@ -1628,14 +1652,14 @@ app.post("/api/trades/import", async (req, res) => {
     db.notifications.unshift({
       id: "not_" + generateUUID(),
       title: "Nhập lịch sử lệnh hàng loạt",
-      message: `${traderName} vừa nhập ${importedCount} lệnh trade từ tệp lịch sử cho tk ${account.name}. Phát hiện ${addedMistakesCount} lỗi kỷ luật.`,
+      message: `${traderName} vừa nhập ${importedCount} lệnh trade từ tệp lịch sử cho tk ${account.name}.${skippedCount > 0 ? ` Bỏ qua ${skippedCount} lệnh trùng.` : ""} Phát hiện ${addedMistakesCount} lỗi kỷ luật.`,
       type: addedMistakesCount > 0 ? "warning" : "success",
       read: false,
       created_at: new Date().toISOString()
     });
 
     await writeDB(db);
-    res.json({ success: true, imported: importedCount, mistakes: addedMistakesCount, penalties: addedPenaltiesCount });
+    res.json({ success: true, imported: importedCount, skipped: skippedCount, mistakes: addedMistakesCount, penalties: addedPenaltiesCount });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to import trades: " + error.message });
   }
@@ -2078,6 +2102,86 @@ app.delete("/api/market-news/:id", async (req, res) => {
     res.json({ success: true, message: "Đã xóa tin tức thị trường thành công." });
   } catch (error: any) {
     res.status(500).json({ error: "Failed to delete market news: " + error.message });
+  }
+});
+
+
+// 12. Loans endpoints
+
+// 12.1 Create or Update a Loan
+app.post("/api/loans", async (req, res) => {
+  try {
+    const db = await readDB();
+    const { id, lender_name, amount, interest_rate, interest_cycle_days, start_date, next_due_date, notes, is_active } = req.body;
+
+    if (!lender_name || !amount || !start_date) {
+      return res.status(400).json({ error: "Missing required fields (lender_name, amount, start_date) to save loan." });
+    }
+
+    if (!db.loans) {
+      db.loans = [];
+    }
+
+    if (id) {
+      // Edit mode
+      const idx = db.loans.findIndex((l: any) => l.id === id);
+      if (idx !== -1) {
+        db.loans[idx] = {
+          ...db.loans[idx],
+          lender_name,
+          amount: Number(amount),
+          interest_rate: Number(interest_rate),
+          interest_cycle_days: Number(interest_cycle_days),
+          start_date,
+          next_due_date: next_due_date || db.loans[idx].next_due_date,
+          notes: notes || "",
+          is_active: is_active !== undefined ? is_active : db.loans[idx].is_active
+        };
+        await writeDB(db);
+        return res.json(db.loans[idx]);
+      } else {
+        return res.status(404).json({ error: "Loan not found." });
+      }
+    }
+
+    // Add mode
+    const calculatedNextDueDate = next_due_date || new Date(new Date(start_date).getTime() + (interest_cycle_days || 10) * 24 * 60 * 60 * 1000).toISOString();
+    const newLoan = {
+      id: "loan_" + generateUUID(),
+      lender_name,
+      amount: Number(amount),
+      interest_rate: Number(interest_rate || 5000),
+      interest_cycle_days: Number(interest_cycle_days || 10),
+      start_date,
+      next_due_date: calculatedNextDueDate,
+      notes: notes || "",
+      is_active: is_active !== undefined ? is_active : true,
+      created_at: new Date().toISOString()
+    };
+    
+    db.loans.push(newLoan);
+    await writeDB(db);
+    res.json(newLoan);
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to save loan: " + error.message });
+  }
+});
+
+// 12.2 Delete a Loan
+app.delete("/api/loans/:id", async (req, res) => {
+  try {
+    const db = await readDB();
+    const loanId = req.params.id;
+
+    if (!db.loans) {
+      db.loans = [];
+    }
+
+    db.loans = db.loans.filter((l: any) => l.id !== loanId);
+    await writeDB(db);
+    res.json({ success: true, message: "Đã xóa khoản vay thành công." });
+  } catch (error: any) {
+    res.status(500).json({ error: "Failed to delete loan: " + error.message });
   }
 });
 

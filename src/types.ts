@@ -191,6 +191,7 @@ export interface SharedFundTransaction {
   description: string;
   user_id: string;
   created_at: string;
+  loan_id?: string;
 }
 
 export interface SharedFund {
@@ -198,6 +199,19 @@ export interface SharedFund {
   currency: string;
   contributed_capital?: number;
   transactions: SharedFundTransaction[];
+}
+
+export interface Loan {
+  id: string;
+  lender_name: string;
+  amount: number;
+  interest_rate: number; // Tiền lãi trên mỗi 1 triệu vay trên ngày (mặc định 5k)
+  interest_cycle_days: number; // Chu kỳ đóng lãi (mặc định 10 ngày)
+  start_date: string; // ISO String
+  next_due_date: string; // ISO String
+  notes?: string;
+  is_active: boolean;
+  created_at: string;
 }
 
 export interface MarketNews {

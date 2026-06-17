@@ -14,9 +14,10 @@ interface KPICardsProps {
   activeUserId: string;
   sharedFund?: any;
   onUpdateCapital?: (newCapital: number) => Promise<void>;
+  loans?: any[];
 }
 
-export default function KPICards({ trades, accounts, rewardsPenalties, activeUserId, sharedFund, onUpdateCapital }: KPICardsProps) {
+export default function KPICards({ trades, accounts, rewardsPenalties, activeUserId, sharedFund, onUpdateCapital, loans }: KPICardsProps) {
   // Conversions for aggregate display: $1 = 25,000 VND
   const USD_TO_VND = 25000;
 
@@ -25,10 +26,11 @@ export default function KPICards({ trades, accounts, rewardsPenalties, activeUse
   const [inputCapVal, setInputCapVal] = useState("");
 
   const contributedCapital = sharedFund?.contributed_capital ?? 20000000;
+  const totalBorrowed = (loans || []).filter((l: any) => l.is_active).reduce((sum: number, l: any) => sum + l.amount, 0);
   const accountsCost = accounts.reduce((sum, a) => sum + (a.purchase_price ?? 0), 0);
   const otherInflows = (sharedFund?.transactions || []).filter((t: any) => t.type === "INFLOW" && t.id !== "tx_1").reduce((sum: number, t: any) => sum + t.amount, 0);
   const otherOutflows = (sharedFund?.transactions || []).filter((t: any) => t.type === "OUTFLOW" && t.id !== "tx_2").reduce((sum: number, t: any) => sum + t.amount, 0);
-  const remainingFundBalance = contributedCapital - accountsCost + otherInflows - otherOutflows;
+  const remainingFundBalance = contributedCapital + totalBorrowed - accountsCost + otherInflows - otherOutflows;
 
   // Real-time calculations
   const totalBalanceVND = accounts.reduce((acc, current) => {

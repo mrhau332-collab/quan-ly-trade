@@ -251,12 +251,21 @@ export default function MarketNewsSection({
                   {dayEvents.map((item) => {
                     const impactStyle = getImpactColor(item.impact);
                     const timeStr = formatTime(item.datetime);
+                    const isHigh = item.impact === "HIGH";
+                    const cardBorder = isHigh 
+                      ? "border-rose-500/40 bg-gradient-to-br from-[#121A2B] to-rose-950/10 shadow-lg ring-1 ring-rose-500/10" 
+                      : "border-slate-800 bg-[#121A2B]";
 
                     return (
                       <div
                         key={item.id}
-                        className="bg-[#121A2B] border border-slate-800 rounded-xl p-4 flex flex-col justify-between shadow-lg hover:border-slate-700/80 transition-all group"
+                        className={`rounded-xl p-4 flex flex-col justify-between shadow-lg hover:border-rose-500/60 transition-all group border ${cardBorder} relative overflow-hidden`}
                       >
+                        {isHigh && (
+                          <span className="absolute top-0 right-0 bg-rose-600 text-white font-extrabold text-[8px] uppercase px-2 py-0.5 rounded-bl-lg tracking-widest animate-pulse z-10">
+                            Tác động cực mạnh 🔥
+                          </span>
+                        )}
                         {/* Event Meta Line */}
                         <div className="flex justify-between items-start gap-2 mb-2">
                           <div className="flex items-center gap-2">

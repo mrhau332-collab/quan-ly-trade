@@ -26,7 +26,8 @@ import {
   Regulation,
   SharedFund,
   SharedFundTransaction,
-  MarketNews
+  MarketNews,
+  Loan
 } from "./types.js";
 import UserPicker from "./components/UserPicker.tsx";
 import KPICards from "./components/KPICards.tsx";
@@ -69,7 +70,8 @@ import {
   Coins,
   Landmark,
   PiggyBank,
-  Save
+  Save,
+  Zap
 } from "lucide-react";
 
 export default function App() {
@@ -95,6 +97,19 @@ export default function App() {
   const [regulations, setRegulations] = useState<Regulation[]>([]);
   const [sharedFund, setSharedFund] = useState<SharedFund | null>(null);
   const [marketNews, setMarketNews] = useState<MarketNews[]>([]);
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [showAddLoanModal, setShowAddLoanModal] = useState(false);
+  const [showEditLoanModal, setShowEditLoanModal] = useState(false);
+  const [selectedLoanToEdit, setSelectedLoanToEdit] = useState<Loan | null>(null);
+  const [loanForm, setLoanForm] = useState({
+    lender_name: "",
+    amount: "50000000",
+    interest_rate: "5000",
+    interest_cycle_days: "10",
+    start_date: new Date().toISOString().slice(0, 10),
+    notes: ""
+  });
+  const [showMistakesOnly, setShowMistakesOnly] = useState(false);
   
   // Auth simulation state
   const [activeUser, setActiveUser] = useState<User | null>(null);
@@ -326,6 +341,8 @@ export default function App() {
   const [importAccountId, setImportAccountId] = useState("");
   const [importSelectedRows, setImportSelectedRows] = useState<boolean[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [importPreset, setImportPreset] = useState("auto");
+  const [showImportGuide, setShowImportGuide] = useState(false);
 
   // CSV Parsing helper functions
   const parseCSVData = (text: string) => {
@@ -375,7 +392,7 @@ export default function App() {
     return { headers, rows };
   };
 
-  const autoDetectColumns = (headers: string[]) => {
+  const applyImportPreset = (presetName: string, headers: string[]) => {
     const mapping = {
       symbol: "",
       direction: "",
@@ -389,10 +406,21 @@ export default function App() {
     };
 
     const findMatch = (keys: string[]) => {
-      for (const header of headers) {
-        const lower = header.toLowerCase().replace(/[\s_\/-]/g, "");
-        for (const key of keys) {
-          if (lower.includes(key.toLowerCase().replace(/[\s_\/-]/g, ""))) {
+      const cleanKeys = keys.map(k => k.toLowerCase().replace(/[\s_\/-]/g, ""));
+      // 1. Exact Match Pass (most reliable)
+      for (const targetKey of cleanKeys) {
+        for (const header of headers) {
+          const lower = header.toLowerCase().replace(/[\s_\/-]/g, "");
+          if (lower === targetKey) {
+            return header;
+          }
+        }
+      }
+      // 2. Substring Match Pass
+      for (const targetKey of cleanKeys) {
+        for (const header of headers) {
+          const lower = header.toLowerCase().replace(/[\s_\/-]/g, "");
+          if (lower.includes(targetKey)) {
             return header;
           }
         }
@@ -400,25 +428,48 @@ export default function App() {
       return "";
     };
 
-    mapping.symbol = findMatch(["symbol", "pair", "item", "ticker", "asset", "instrument", "mã", "cặp"]);
-    mapping.direction = findMatch(["type", "dir", "direction", "action", "side", "loại", "hướng"]);
-    mapping.entry_price = findMatch(["entry", "openprice", "giávào", "giámở", "open_price", "entry_price"]);
-    mapping.stop_loss = findMatch(["stoploss", "sl", "stop_loss", "cắtlỗ"]);
-    mapping.take_profit = findMatch(["takeprofit", "tp", "take_profit", "chốtlời"]);
-    mapping.profit_loss = findMatch(["profit", "loss", "pl", "pnl", "lợinhuận", "kếtquả"]);
-    mapping.opened_at = findMatch(["opentime", "opened", "date", "time", "ngàyvào", "open_time"]);
-    mapping.closed_at = findMatch(["closetime", "closed", "ngàyđóng", "close_time"]);
-    mapping.risk_amount = findMatch(["risk", "riskamount", "rủiro", "risk_amount"]);
+    if (presetName === "topstep") {
+      mapping.symbol = findMatch(["instrument", "symbol", "ticker", "contract", "asset"]);
+      mapping.direction = findMatch(["side", "action", "type", "direction", "buysell"]);
+      mapping.entry_price = findMatch(["price", "avgprice", "avgfillprice", "entryprice", "executionprice", "fillprice"]);
+      mapping.stop_loss = findMatch(["stoploss", "sl", "stop_loss", "s/l"]);
+      mapping.take_profit = findMatch(["takeprofit", "tp", "take_profit", "t/p"]);
+      mapping.profit_loss = findMatch(["netp&l", "pnl", "realizedp&l", "realizedpnl", "netpnl", "profit", "loss"]);
+      mapping.opened_at = findMatch(["opentime", "opened", "time", "executiontime", "timestamp", "date"]);
+      mapping.closed_at = findMatch(["closetime", "closed", "time", "executiontime", "timestamp", "date"]);
+    } else if (presetName === "ftmo") {
+      mapping.symbol = findMatch(["symbol", "instrument"]);
+      mapping.direction = findMatch(["type", "side", "direction"]);
+      mapping.entry_price = findMatch(["openprice", "entryprice", "price"]);
+      mapping.stop_loss = findMatch(["sl", "s/l", "stoploss"]);
+      mapping.take_profit = findMatch(["tp", "t/p", "takeprofit"]);
+      mapping.profit_loss = findMatch(["profit", "pnl", "gain", "netp&l"]);
+      mapping.opened_at = findMatch(["opentime", "opened", "time"]);
+      mapping.closed_at = findMatch(["closetime", "closed", "time"]);
+    } else {
+      // Auto detect
+      mapping.symbol = findMatch(["symbol", "pair", "item", "ticker", "asset", "instrument", "mã", "cặp", "contract"]);
+      mapping.direction = findMatch(["type", "dir", "direction", "action", "side", "loại", "hướng"]);
+      mapping.entry_price = findMatch(["entry", "openprice", "giávào", "giámở", "open_price", "entry_price", "price", "avgprice", "fillprice"]);
+      mapping.stop_loss = findMatch(["stoploss", "sl", "stop_loss", "cắtlỗ", "s/l"]);
+      mapping.take_profit = findMatch(["takeprofit", "tp", "take_profit", "chốtlời", "t/p"]);
+      mapping.profit_loss = findMatch(["profit", "loss", "pl", "pnl", "lợinhuận", "kếtquả", "net", "gain"]);
+      mapping.opened_at = findMatch(["opentime", "opened", "date", "time", "ngàyvào", "open_time", "executiontime", "timestamp"]);
+      mapping.closed_at = findMatch(["closetime", "closed", "ngàyđóng", "close_time"]);
+      mapping.risk_amount = findMatch(["risk", "riskamount", "rủiro", "risk_amount"]);
+    }
 
-    // Set fallback index-based defaults if not matched
-    if (!mapping.symbol && headers.length > 4) mapping.symbol = headers[4]; // Item
-    if (!mapping.direction && headers.length > 2) mapping.direction = headers[2]; // Type
-    if (!mapping.entry_price && headers.length > 5) mapping.entry_price = headers[5]; // Price (open)
-    if (!mapping.stop_loss && headers.length > 6) mapping.stop_loss = headers[6]; // S/L
-    if (!mapping.take_profit && headers.length > 7) mapping.take_profit = headers[7]; // T/P
-    if (!mapping.profit_loss && headers.length > 13) mapping.profit_loss = headers[13]; // Profit
+    // Set fallback index-based defaults if not matched and it's auto
+    if (presetName === "auto") {
+      if (!mapping.symbol && headers.length > 4) mapping.symbol = headers[4];
+      if (!mapping.direction && headers.length > 2) mapping.direction = headers[2];
+      if (!mapping.entry_price && headers.length > 5) mapping.entry_price = headers[5];
+      if (!mapping.stop_loss && headers.length > 6) mapping.stop_loss = headers[6];
+      if (!mapping.take_profit && headers.length > 7) mapping.take_profit = headers[7];
+      if (!mapping.profit_loss && headers.length > 13) mapping.profit_loss = headers[13];
+    }
 
-    return mapping;
+    setColumnMapping(mapping);
   };
 
   const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -436,9 +487,8 @@ export default function App() {
         setCsvHeaders(parsed.headers);
         setRawRows(parsed.rows);
         
-        // Auto-detect columns
-        const detected = autoDetectColumns(parsed.headers);
-        setColumnMapping(detected);
+        applyImportPreset("auto", parsed.headers);
+        setImportPreset("auto");
 
         // Pre-select all rows
         setImportSelectedRows(new Array(parsed.rows.length).fill(true));
@@ -466,6 +516,7 @@ export default function App() {
       setRegulations(data.regulations || []);
       setSharedFund(data.shared_fund || null);
       setMarketNews(data.market_news || []);
+      setLoans(data.loans || []);
 
       // Auto assign and sync active user details
       const savedUserId = localStorage.getItem("tg-active-user-id");
@@ -927,9 +978,10 @@ export default function App() {
       setRawRows([]);
       setImportSelectedRows([]);
       
+      const skippedText = data.skipped > 0 ? ` (Đã tự động bỏ qua ${data.skipped} lệnh trùng lặp)` : "";
       showCustomAlert(
         "Thành công",
-        `Đã nhập thành công ${data.imported} lệnh! Ghi nhận thêm ${data.mistakes} lỗi kỷ luật và phạt ${data.penalties} lần.`,
+        `Đã nhập thành công ${data.imported} lệnh!${skippedText} Ghi nhận thêm ${data.mistakes} lỗi kỷ luật và phạt ${data.penalties} lần.`,
         "success"
       );
     } catch (err: any) {
@@ -1620,6 +1672,89 @@ export default function App() {
     }
   };
 
+  const handleSaveLoan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const resp = await fetch("/api/loans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedLoanToEdit?.id,
+          lender_name: loanForm.lender_name,
+          amount: parseFloat(loanForm.amount),
+          interest_rate: parseFloat(loanForm.interest_rate),
+          interest_cycle_days: parseInt(loanForm.interest_cycle_days),
+          start_date: loanForm.start_date,
+          notes: loanForm.notes
+        })
+      });
+      if (!resp.ok) throw new Error("Thất bại khi lưu khoản vay");
+      showCustomAlert("Thành công", "Đã lưu thông tin khoản vay.", "success");
+      setShowAddLoanModal(false);
+      setShowEditLoanModal(false);
+      await fetchDB();
+    } catch (err: any) {
+      showCustomAlert("Lỗi", err.message, "error");
+    }
+  };
+
+  const handleDeleteLoan = (loanId: string) => {
+    showCustomConfirm("Xác nhận xóa", "Bạn có chắc chắn muốn xóa khoản vay này?", async () => {
+      try {
+        const resp = await fetch(`/api/loans/${loanId}`, { method: "DELETE" });
+        if (!resp.ok) throw new Error("Không thể xóa khoản vay");
+        showCustomAlert("Thành công", "Đã xóa khoản vay.", "success");
+        await fetchDB();
+      } catch (err: any) {
+        showCustomAlert("Lỗi", err.message, "error");
+      }
+    });
+  };
+
+  const handlePayInterest = async (loan: Loan) => {
+    const dailyInterest = (loan.amount / 1000000) * loan.interest_rate;
+    const interestAmount = dailyInterest * loan.interest_cycle_days;
+
+    showCustomConfirm(
+      "Xác nhận đóng lãi",
+      `Bạn muốn xác nhận đóng lãi ${interestAmount.toLocaleString("vi-VN")} ₫ cho khoản vay từ ${loan.lender_name}?`,
+      async () => {
+        try {
+          const txResp = await fetch("/api/shared-fund/transactions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              amount: interestAmount,
+              type: "OUTFLOW",
+              purpose: `Đóng lãi định kỳ (${loan.interest_cycle_days} ngày)`,
+              description: `Đóng lãi cho khoản vay ${loan.amount.toLocaleString("vi-VN")} ₫ từ ${loan.lender_name}.`,
+              user_id: activeUser?.id || "1"
+            })
+          });
+          if (!txResp.ok) throw new Error("Không thể tạo giao dịch đóng lãi trên quỹ chung.");
+
+          const currentDueDate = new Date(loan.next_due_date);
+          const nextDueDate = new Date(currentDueDate.getTime() + loan.interest_cycle_days * 24 * 60 * 60 * 1000).toISOString();
+          
+          const loanResp = await fetch("/api/loans", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...loan,
+              next_due_date: nextDueDate
+            })
+          });
+          if (!loanResp.ok) throw new Error("Không thể cập nhật ngày đóng lãi tiếp theo cho khoản vay.");
+
+          showCustomAlert("Thành công", `Đã đóng lãi thành công ${interestAmount.toLocaleString("vi-VN")} ₫.`, "success");
+          await fetchDB();
+        } catch (err: any) {
+          showCustomAlert("Lỗi", err.message, "error");
+        }
+      }
+    );
+  };
+
   // Simple clean markdown parser to avoid external markup rendering crashes
   const renderSimpleMarkdown = (text: string) => {
     if (!text) return null;
@@ -1900,7 +2035,7 @@ export default function App() {
               activeTab === "dashboard" ? "bg-[#121A2B] text-white border border-slate-800/80" : "text-slate-400 hover:text-white"
             }`}
           >
-            <TrendingUp className="w-4 h-4" /> Tổng quan (Dashboard)
+            <TrendingUp className="w-4 h-4" /> Dòng Vốn & Tài Khoản
           </button>
           <button
             onClick={() => setActiveTab("trade-journal")}
@@ -1911,36 +2046,20 @@ export default function App() {
             <ClipboardList className="w-4 h-4" /> Nhật ký giao dịch
           </button>
           <button
-            onClick={() => setActiveTab("daily-journal")}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "daily-journal" ? "bg-[#121A2B] text-white border border-slate-800/80" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            <BookOpen className="w-4 h-4" /> Nhật ký ngày
-          </button>
-          <button
-            onClick={() => setActiveTab("accountability")}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "accountability" ? "bg-[#121A2B] text-white border border-slate-800/80" : "text-slate-400 hover:text-white"
-            }`}
-          >
-            <Users className="w-4 h-4" /> Giám sát chéo
-          </button>
-          <button
-            onClick={() => setActiveTab("shared-fund")}
-            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "shared-fund" ? "bg-[#121A2B] text-emerald-400 border border-emerald-500/20" : "text-slate-400 hover:text-emerald-400"
-            }`}
-          >
-            <Landmark className="w-4 h-4" /> Quỹ tiền chung (Fund)
-          </button>
-          <button
             onClick={() => setActiveTab("leaderboard")}
             className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === "leaderboard" ? "bg-[#121A2B] text-amber-400 border border-amber-500/20" : "text-slate-400 hover:text-amber-400"
+              activeTab === "leaderboard" ? "bg-[#121A2B] text-white border border-slate-800/80" : "text-slate-400 hover:text-white"
             }`}
           >
-            <Award className="w-4 h-4" /> Thử thách & Thể lệ
+            <Award className="w-4 h-4" /> Thưởng Phạt Kỷ Luật
+          </button>
+          <button
+            onClick={() => setActiveTab("market-news")}
+            className={`px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === "market-news" ? "bg-[#121A2B] text-white border border-slate-800/80" : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <Zap className="w-4 h-4" /> Tin Tức Vàng
           </button>
         </div>
       </nav>
@@ -1960,43 +2079,6 @@ export default function App() {
         {/* VIEW 1: DASHBOARD */}
         {activeTab === "dashboard" && (
           <div className="space-y-6" id="dashboard-tab-view">
-            {/* Market News Section */}
-            <MarketNewsSection
-              news={marketNews}
-              activeUser={activeUser}
-              onAddClick={() => {
-                setNewsForm({
-                  title: "",
-                  impact: "HIGH",
-                  datetime: new Date().toISOString().slice(0, 16),
-                  forecast: "",
-                  actual: "",
-                  previous: "",
-                  gold_impact_direction: "VOLATILE",
-                  description: ""
-                });
-                setSelectedNewsToEdit(null);
-                setShowAddNewsModal(true);
-              }}
-              onEditClick={(item) => {
-                setSelectedNewsToEdit(item);
-                setNewsForm({
-                  title: item.title,
-                  impact: item.impact,
-                  datetime: new Date(item.datetime).toISOString().slice(0, 16),
-                  forecast: item.forecast || "",
-                  actual: item.actual || "",
-                  previous: item.previous || "",
-                  gold_impact_direction: item.gold_impact_direction,
-                  description: item.description || ""
-                });
-                setShowEditNewsModal(true);
-              }}
-              onDeleteClick={handleDeleteNews}
-              onQuickUpdateActual={handleQuickUpdateActual}
-              onSyncClick={handleSyncNews}
-              isSyncing={isSyncing}
-            />
 
             {/* KPI Cards Component */}
             {activeUser && (
@@ -2007,6 +2089,7 @@ export default function App() {
                 activeUserId={activeUser.id}
                 sharedFund={sharedFund}
                 onUpdateCapital={handleUpdateContributedCapital}
+                loans={loans}
               />
             )}
 
@@ -2075,73 +2158,293 @@ export default function App() {
               />
             </div>
 
-            {/* Recharts Analytics & Heat Map Bento Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="dashboard-analytics-bento">
-              {/* Left Column: Recharts Analytics Components */}
-              <div className="lg:col-span-2 space-y-3" id="dashboard-performance-charts">
-                <h2 className="text-sm font-bold uppercase tracking-widest text-[#10B981] flex items-center gap-2">
-                  <Activity className="w-3.5 h-3.5 animate-pulse" /> Đồ thị phân tích hiệu suất vĩ mô
-                </h2>
-                <Charts trades={trades} accounts={accounts} />
+            {/* 3. Loans Section */}
+            <div className="bg-[#121A2B] border border-slate-800 rounded-xl p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                 <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                      <Landmark className="w-4 h-4 text-emerald-400" /> Các Khoản Vay & Đóng Lãi (Mỗi 10 ngày)
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Quản lý các khoản vay đóng lãi. Mặc định chu kỳ 10 ngày, lãi 5k/ngày cho mỗi triệu vay (50k/triệu/10 ngày).
+                    </p>
+                 </div>
+                 <button
+                    onClick={() => {
+                      setLoanForm({
+                        lender_name: "",
+                        amount: "50000000",
+                        interest_rate: "5000",
+                        interest_cycle_days: "10",
+                        start_date: new Date().toISOString().slice(0, 10),
+                        notes: ""
+                      });
+                      setSelectedLoanToEdit(null);
+                      setShowAddLoanModal(true);
+                    }}
+                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white rounded-lg flex items-center gap-1 cursor-pointer transition-all self-start sm:self-center"
+                 >
+                   <Plus className="w-3.5 h-3.5" /> Thêm Khoản Vay
+                 </button>
               </div>
 
-              {/* Right Column: Portfolio Heat Map */}
-              <div className="lg:col-span-1 space-y-3" id="dashboard-portfolio-heatmap">
-                <PortfolioHeatmap trades={trades} />
-              </div>
+              {loans.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="py-2.5 px-3">Nguồn Vay</th>
+                        <th className="py-2.5 px-3">Số Tiền Vay</th>
+                        <th className="py-2.5 px-3">Ngày Vay</th>
+                        <th className="py-2.5 px-3">Lãi / Triệu / Ngày</th>
+                        <th className="py-2.5 px-3 text-amber-400">Tiền Lãi Chu Kỳ</th>
+                        <th className="py-2.5 px-3">Hạn Đóng Tiếp Theo</th>
+                        <th className="py-2.5 px-3">Còn Lại</th>
+                        <th className="py-2.5 px-3 text-right">Hành Động</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {loans.map((loan) => {
+                        const dailyInterest = (loan.amount / 1000000) * loan.interest_rate;
+                        const cycleInterest = dailyInterest * loan.interest_cycle_days;
+                        
+                        // Days remaining calculation
+                        const dueTime = new Date(loan.next_due_date).getTime();
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const due = new Date(loan.next_due_date);
+                        due.setHours(0, 0, 0, 0);
+                        
+                        const diffTime = due.getTime() - today.getTime();
+                        const diffDays = Math.ceil(diffTime / (24 * 60 * 60 * 1000));
+                        
+                        const remainingText = diffDays > 0 ? `${diffDays} ngày` : diffDays === 0 ? "Hôm nay! 🚨" : `Trễ ${Math.abs(diffDays)} ngày ⚠️`;
+                        const remainingColor = diffDays > 2 ? "text-emerald-400" : diffDays >= 0 ? "text-yellow-400" : "text-rose-400 animate-pulse font-bold";
+
+                        return (
+                          <tr key={loan.id} className="hover:bg-slate-800/10">
+                            <td className="py-3 px-3 font-semibold text-white">{loan.lender_name}</td>
+                            <td className="py-3 px-3 font-mono font-semibold text-white">{loan.amount.toLocaleString("vi-VN")} ₫</td>
+                            <td className="py-3 px-3 font-mono text-slate-400">{new Date(loan.start_date).toLocaleDateString("vi-VN")}</td>
+                            <td className="py-3 px-3 font-mono text-slate-400">{loan.interest_rate.toLocaleString("vi-VN")} ₫</td>
+                            <td className="py-3 px-3 font-mono font-semibold text-amber-400">{cycleInterest.toLocaleString("vi-VN")} ₫</td>
+                            <td className="py-3 px-3 font-mono text-slate-300 font-semibold">{new Date(loan.next_due_date).toLocaleDateString("vi-VN")}</td>
+                            <td className={`py-3 px-3 font-bold ${remainingColor}`}>{remainingText}</td>
+                            <td className="py-3 px-3 text-right space-x-1">
+                              <button
+                                onClick={() => handlePayInterest(loan)}
+                                className="px-2 py-1 bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 rounded hover:bg-emerald-600 hover:text-white transition-all text-[10px] font-bold cursor-pointer"
+                              >
+                                Đóng Lãi
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSelectedLoanToEdit(loan);
+                                  setLoanForm({
+                                    lender_name: loan.lender_name,
+                                    amount: loan.amount.toString(),
+                                    interest_rate: loan.interest_rate.toString(),
+                                    interest_cycle_days: loan.interest_cycle_days.toString(),
+                                    start_date: loan.start_date.slice(0, 10),
+                                    notes: loan.notes || ""
+                                  });
+                                  setShowEditLoanModal(true);
+                                }}
+                                className="p-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-all text-[10px] cursor-pointer inline-block align-middle"
+                                title="Sửa thông tin khoản vay"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={() => handleDeleteLoan(loan.id)}
+                                className="p-1 bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded transition-all text-[10px] cursor-pointer inline-block align-middle"
+                                title="Xóa khoản vay"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 text-center py-6 font-mono">Chưa có khoản vay nào được thiết lập.</p>
+              )}
             </div>
 
+            {/* 4. Sổ Quỹ Thu Chi */}
+            <div className="bg-[#121A2B] border border-slate-800 rounded-xl p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                 <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-white flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-amber-400" /> Sổ Quỹ Thu Chi & Biến Động Vốn
+                    </h3>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Các hoạt động nạp vốn góp, giải ngân vay và các chi phí phát sinh thực tế của quỹ chung.
+                    </p>
+                 </div>
+                 <button
+                    onClick={() => {
+                      setFundTxForm({
+                        amount: "1000000",
+                        type: "OUTFLOW",
+                        purpose: "Chi tiêu quỹ",
+                        description: "",
+                        user_id: activeUser ? activeUser.id : "1"
+                      });
+                      setShowAddFundTxModal(true);
+                    }}
+                    className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold rounded-lg flex items-center gap-1 border border-slate-700 cursor-pointer transition-all self-start sm:self-center"
+                 >
+                   <Plus className="w-3.5 h-3.5 text-slate-400" /> Ghi nhận Thu / Chi
+                 </button>
+              </div>
+              
+              {sharedFund && sharedFund.transactions && sharedFund.transactions.length > 0 ? (
+                <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="py-2 px-3">Ngày</th>
+                        <th className="py-2 px-3">Phân loại</th>
+                        <th className="py-2 px-3">Số tiền</th>
+                        <th className="py-2 px-3">Mục đích</th>
+                        <th className="py-2 px-3">Chi tiết mô tả</th>
+                        <th className="py-2 px-3 text-right">Xóa</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {[...sharedFund.transactions].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((tx) => (
+                        <tr key={tx.id} className="hover:bg-slate-800/10">
+                          <td className="py-2.5 px-3 text-slate-400 font-mono">{new Date(tx.created_at).toLocaleDateString("vi-VN")}</td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              tx.type === "INFLOW" ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"
+                            }`}>
+                              {tx.type === "INFLOW" ? "THU NẠP" : "CHI TIÊU"}
+                            </span>
+                          </td>
+                          <td className={`py-2.5 px-3 font-mono font-semibold ${tx.type === "INFLOW" ? "text-emerald-400" : "text-rose-400"}`}>
+                            {tx.type === "INFLOW" ? "+" : "-"}{tx.amount.toLocaleString("vi-VN")} ₫
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-200 font-semibold">{tx.purpose}</td>
+                          <td className="py-2.5 px-3 text-slate-400 italic max-w-xs truncate" title={tx.description}>{tx.description || "-"}</td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              onClick={async () => {
+                                showCustomConfirm("Xác nhận xóa", "Bạn có chắc chắn muốn xóa giao dịch này khỏi sổ quỹ?", async () => {
+                                  try {
+                                    const resp = await fetch(`/api/shared-fund/transactions/${tx.id}`, { method: "DELETE" });
+                                    if (!resp.ok) throw new Error("Thất bại khi xóa giao dịch");
+                                    await fetchDB();
+                                  } catch (err: any) {
+                                    showCustomAlert("Lỗi", err.message, "error");
+                                  }
+                                });
+                              }}
+                              className="text-slate-500 hover:text-rose-400 cursor-pointer font-bold text-xs p-1"
+                              title="Xóa giao dịch"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 text-center py-6 font-mono">Chưa có giao dịch thu chi nào được ghi nhận.</p>
+              )}
+            </div>
+
+            {/* 5. Chart and Heatmap */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+               <div className="bg-[#121A2B] border border-slate-800 p-5 rounded-xl space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-[#10B981] flex items-center gap-2">
+                    <Activity className="w-3.5 h-3.5 animate-pulse" /> Đồ thị phân tích hiệu suất số dư tài khoản
+                  </h3>
+                  <Charts accounts={accounts} trades={trades} />
+               </div>
+               <div className="bg-[#121A2B] border border-slate-800 p-5 rounded-xl space-y-3">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-400 flex items-center gap-2">
+                    <Sliders className="w-3.5 h-3.5" /> Heatmap phân bổ vốn các tài khoản trading
+                  </h3>
+                  <PortfolioHeatmap trades={trades} />
+               </div>
+            </div>
 
           </div>
         )}
 
         {/* VIEW 2: TRADE JOURNAL */}
-        {activeTab === "trade-journal" && (
-          <div className="space-y-6" id="trade-journal-tab-view">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-slate-800 pb-4">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <ClipboardList className="text-indigo-400 w-5 h-5" /> Nhật ký chi tiết giao dịch
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">Danh sách đầy đủ các lệnh trade, trạng thái và tỷ lệ rủi ro.</p>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap self-start">
-                <button
-                  id="import-trade-btn-journal"
-                  onClick={() => setShowImportTradesModal(true)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-slate-700/60 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <RefreshCw className="w-4 h-4" /> Nhập lịch sử bằng CSV
-                </button>
-                <button
-                  id="create-trade-btn-journal"
-                  onClick={() => setShowOpenTradeModal(true)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white rounded-lg flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" /> Mở nến giao dịch mới
-                </button>
-              </div>
-            </div>
+        {activeTab === "trade-journal" && (() => {
+          const displayedTrades = trades.filter((trade) => {
+            if (!showMistakesOnly) return true;
+            const hasMistake = mistakes.some((m) => m.trade_id === trade.id);
+            const isLoss = trade.result === TradeResult.LOSS;
+            const hasNotes = trade.notes && trade.notes.trim() !== "";
+            return hasMistake || isLoss || hasNotes;
+          });
 
-            {/* Trade Records List Grid */}
-            <div className="bg-[#121A2B] border border-slate-800 rounded-xl overflow-hidden shadow-lg" id="trades-list-table">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0B1020] text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
-                    <tr>
-                      <th className="p-3.5">Trader</th>
-                      <th className="p-3.5">TK / Mã</th>
-                      <th className="p-3.5">Hướng / Giá vào</th>
-                      <th className="p-3.5">Mục tiêu (SL/TP)</th>
-                      <th className="p-3.5">Rủi ro (Amt/%)</th>
-                      <th className="p-3.5">Hành vi / Setup</th>
-                      <th className="p-3.5">Kết Quả (P/L)</th>
-                      <th className="p-3.5 text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/50">
-                    {trades.length > 0 ? (
-                      trades.map((trade) => {
+          return (
+            <div className="space-y-6" id="trade-journal-tab-view">
+              <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 border-b border-slate-800 pb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <ClipboardList className="text-indigo-400 w-5 h-5" /> Nhật ký chi tiết giao dịch
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">Ghi chép lịch sử vào lệnh, phân tích kỹ năng và rút bài học lỗi lầm.</p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap self-start">
+                  {/* Mistakes Only Filter */}
+                  <label className="flex items-center gap-2 bg-[#121A2B] border border-slate-800 rounded-lg px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-white cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={showMistakesOnly}
+                      onChange={(e) => setShowMistakesOnly(e.target.checked)}
+                      className="accent-indigo-500 rounded"
+                    />
+                    <span>Chỉ lệnh sai lầm & bài học ⚠️</span>
+                  </label>
+                  <button
+                    id="import-trade-btn-journal"
+                    onClick={() => setShowImportTradesModal(true)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-slate-700/60 rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Nhập lịch sử CSV
+                  </button>
+                  <button
+                    id="create-trade-btn-journal"
+                    onClick={() => setShowOpenTradeModal(true)}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold text-white rounded-lg flex items-center gap-2 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" /> Mở lệnh mới
+                  </button>
+                </div>
+              </div>
+
+              {/* Trade Records List Grid */}
+              <div className="bg-[#121A2B] border border-slate-800 rounded-xl overflow-hidden shadow-lg" id="trades-list-table">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-[#0B1020] text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
+                      <tr>
+                        <th className="p-3.5">Trader</th>
+                        <th className="p-3.5">TK / Mã</th>
+                        <th className="p-3.5">Hướng / Giá vào</th>
+                        <th className="p-3.5">Mục tiêu (SL/TP)</th>
+                        <th className="p-3.5">Rủi ro (Amt/%)</th>
+                        <th className="p-3.5">Hành vi / Setup</th>
+                        <th className="p-3.5">Kết Quả (P/L)</th>
+                        <th className="p-3.5 text-right">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/50">
+                      {displayedTrades.length > 0 ? (
+                        displayedTrades.map((trade) => {
                         const owner = users.find((u) => u.id === trade.user_id);
                         const acct = accounts.find((a) => a.id === trade.account_id);
                         const isWin = trade.result === TradeResult.WIN;
@@ -2152,7 +2455,8 @@ export default function App() {
                         const currency = acct?.currency || "USD";
 
                         return (
-                          <tr key={trade.id} className="hover:bg-slate-800/20 transition-all" id={`trade-row-${trade.id}`}>
+                          <React.Fragment key={trade.id}>
+                            <tr className="hover:bg-slate-800/20 transition-all border-b border-slate-800/40" id={`trade-row-${trade.id}`}>
                             {/* Trader Owner */}
                             <td className="p-3.5 flex items-center gap-2">
                               <img src={owner?.avatar} alt="" className="w-6 h-6 rounded-full" referrerPolicy="no-referrer" />
@@ -2284,6 +2588,46 @@ export default function App() {
                               )}
                             </td>
                           </tr>
+                            {/* Expander row for mistakes and lessons */}
+                            {(() => {
+                              const tradeMistakesList = mistakes.filter((m) => m.trade_id === trade.id);
+                              if (tradeMistakesList.length === 0 && (!trade.notes || trade.notes.trim() === "")) return null;
+
+                              return (
+                                <tr className="bg-[#0b1020]/20 text-[11px] border-b border-slate-800/40 font-sans" key={`expand-${trade.id}`}>
+                                  <td colSpan={8} className="p-3 bg-[#0B1020]/10">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-8">
+                                      {tradeMistakesList.length > 0 && (
+                                        <div className="flex-1">
+                                          <span className="font-extrabold text-rose-455 block uppercase tracking-wider text-[9px] mb-1 flex items-center gap-1 select-none">
+                                            ⚠️ Sai lầm kỷ luật:
+                                          </span>
+                                          <div className="space-y-1">
+                                            {tradeMistakesList.map((m) => (
+                                              <div key={m.id} className="text-slate-300 font-medium font-sans">
+                                                • <strong className="text-rose-300">{m.mistake_type}</strong>: {m.description} 
+                                                <span className="text-rose-400/80 font-mono ml-1 font-bold">(-{m.penalty_score.toLocaleString()}đ)</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {trade.notes && trade.notes.trim() !== "" && (
+                                        <div className="flex-1">
+                                          <span className="font-extrabold text-indigo-400 block uppercase tracking-wider text-[9px] mb-1 flex items-center gap-1 select-none">
+                                            📚 Bài học kinh nghiệm:
+                                          </span>
+                                          <p className="text-slate-300 italic font-medium leading-relaxed">
+                                            "{trade.notes}"
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })()}
+                          </React.Fragment>
                         );
                       })
                     ) : (
@@ -2298,7 +2642,8 @@ export default function App() {
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* VIEW 3: DAILY JOURNAL */}
         {activeTab === "daily-journal" && (
@@ -3276,6 +3621,48 @@ export default function App() {
           </div>
         )}
 
+        {/* VIEW 4: MARKET NEWS */}
+        {activeTab === "market-news" && (
+          <div className="space-y-6 animate-fadeIn" id="market-news-tab-view">
+            <MarketNewsSection
+              news={marketNews}
+              activeUser={activeUser}
+              onAddClick={() => {
+                setNewsForm({
+                  title: "",
+                  impact: "HIGH",
+                  datetime: new Date().toISOString().slice(0, 16),
+                  forecast: "",
+                  actual: "",
+                  previous: "",
+                  gold_impact_direction: "VOLATILE",
+                  description: ""
+                });
+                setSelectedNewsToEdit(null);
+                setShowAddNewsModal(true);
+              }}
+              onEditClick={(item) => {
+                setSelectedNewsToEdit(item);
+                setNewsForm({
+                  title: item.title,
+                  impact: item.impact,
+                  datetime: new Date(item.datetime).toISOString().slice(0, 16),
+                  forecast: item.forecast || "",
+                  actual: item.actual || "",
+                  previous: item.previous || "",
+                  gold_impact_direction: item.gold_impact_direction,
+                  description: item.description || ""
+                });
+                setShowEditNewsModal(true);
+              }}
+              onDeleteClick={handleDeleteNews}
+              onQuickUpdateActual={handleQuickUpdateActual}
+              onSyncClick={handleSyncNews}
+              isSyncing={isSyncing}
+            />
+          </div>
+        )}
+
           </motion.div>
         </AnimatePresence>
       </main>
@@ -3832,6 +4219,213 @@ export default function App() {
                 <button
                   type="submit"
                   className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg cursor-pointer"
+                >
+                  Lưu thay đổi
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6.5 MODAL: ADD LOAN */}
+      {showAddLoanModal && (
+        <div className="fixed inset-0 bg-[#0B1020]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#121A2B] border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button
+              onClick={() => setShowAddLoanModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-base font-bold text-white uppercase tracking-wider mb-2.5 border-b border-slate-800 pb-2 flex items-center gap-1.5">
+              <Landmark className="w-4 h-4 text-emerald-400" /> Thiết lập khoản vay mới
+            </h3>
+            
+            <form onSubmit={handleSaveLoan} className="space-y-4 text-xs">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Nguồn vay / Người cho vay</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Vay anh A, Vay ngân hàng B"
+                  value={loanForm.lender_name}
+                  onChange={(e) => setLoanForm({ ...loanForm, lender_name: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Số tiền vay (VNĐ)</label>
+                <input
+                  type="number"
+                  required
+                  placeholder="Ví dụ: 100000000"
+                  value={loanForm.amount}
+                  onChange={(e) => setLoanForm({ ...loanForm, amount: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Lãi (đ / 1 triệu / ngày)</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="Mặc định: 5000"
+                    value={loanForm.interest_rate}
+                    onChange={(e) => setLoanForm({ ...loanForm, interest_rate: e.target.value })}
+                    className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Chu kỳ đóng lãi (ngày)</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="Mặc định: 10"
+                    value={loanForm.interest_cycle_days}
+                    onChange={(e) => setLoanForm({ ...loanForm, interest_cycle_days: e.target.value })}
+                    className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Ngày bắt đầu vay</label>
+                <input
+                  type="date"
+                  required
+                  value={loanForm.start_date}
+                  onChange={(e) => setLoanForm({ ...loanForm, start_date: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Ghi chú thêm</label>
+                <textarea
+                  placeholder="Điền ghi chú nếu có..."
+                  value={loanForm.notes}
+                  onChange={(e) => setLoanForm({ ...loanForm, notes: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white h-20"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowAddLoanModal(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-350 hover:bg-slate-700 font-bold rounded-lg cursor-pointer transition-all"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer transition-all shadow-lg shadow-emerald-600/10"
+                >
+                  Xác nhận
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6.6 MODAL: EDIT LOAN */}
+      {showEditLoanModal && (
+        <div className="fixed inset-0 bg-[#0B1020]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#121A2B] border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button
+              onClick={() => setShowEditLoanModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-base font-bold text-white uppercase tracking-wider mb-2.5 border-b border-slate-800 pb-2 flex items-center gap-1.5">
+              <Landmark className="w-4 h-4 text-amber-400" /> Chỉnh sửa khoản vay
+            </h3>
+            
+            <form onSubmit={handleSaveLoan} className="space-y-4 text-xs">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Nguồn vay / Người cho vay</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ví dụ: Vay anh A, Vay ngân hàng B"
+                  value={loanForm.lender_name}
+                  onChange={(e) => setLoanForm({ ...loanForm, lender_name: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Số tiền vay (VNĐ)</label>
+                <input
+                  type="number"
+                  required
+                  value={loanForm.amount}
+                  onChange={(e) => setLoanForm({ ...loanForm, amount: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Lãi (đ / 1 triệu / ngày)</label>
+                  <input
+                    type="number"
+                    required
+                    value={loanForm.interest_rate}
+                    onChange={(e) => setLoanForm({ ...loanForm, interest_rate: e.target.value })}
+                    className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Chu kỳ đóng lãi (ngày)</label>
+                  <input
+                    type="number"
+                    required
+                    value={loanForm.interest_cycle_days}
+                    onChange={(e) => setLoanForm({ ...loanForm, interest_cycle_days: e.target.value })}
+                    className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Ngày bắt đầu vay</label>
+                <input
+                  type="date"
+                  required
+                  value={loanForm.start_date}
+                  onChange={(e) => setLoanForm({ ...loanForm, start_date: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Ghi chú thêm</label>
+                <textarea
+                  placeholder="Điền ghi chú nếu có..."
+                  value={loanForm.notes}
+                  onChange={(e) => setLoanForm({ ...loanForm, notes: e.target.value })}
+                  className="w-full bg-[#0B1020] border border-slate-800 px-3 py-2 rounded-lg text-white h-20"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditLoanModal(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-350 hover:bg-slate-700 font-bold rounded-lg cursor-pointer transition-all"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-750 text-white font-bold rounded-lg cursor-pointer transition-all shadow-lg shadow-indigo-600/10"
                 >
                   Lưu thay đổi
                 </button>
@@ -4608,6 +5202,66 @@ export default function App() {
 
                   {/* Modal Body */}
                   <form onSubmit={handleCSVImportSubmit} className="flex-1 overflow-y-auto p-6 space-y-6 text-xs flex flex-col">
+                    {/* Collapsible Sync Guide */}
+                    <div className="border border-slate-800 rounded-xl bg-[#0B1020]/60 overflow-hidden transition-all duration-300 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setShowImportGuide(!showImportGuide)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-[#0B1020] hover:bg-slate-900/60 transition-all text-slate-350 hover:text-white font-semibold cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-indigo-400">
+                          <span>💡</span> Hướng dẫn xuất và đồng bộ dữ liệu từ Topstep & FTMO
+                        </span>
+                        <span className="text-slate-500 text-[10px]">
+                          {showImportGuide ? "Thu gọn ▲" : "Xem chi tiết ▼"}
+                        </span>
+                      </button>
+
+                      {showImportGuide && (
+                        <div className="p-4 border-t border-slate-800 bg-[#121A2B]/40 space-y-4 text-slate-300 leading-relaxed text-[11px] font-sans">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Topstep guide */}
+                            <div className="space-y-2 border-r border-slate-800/80 pr-4 last:border-r-0">
+                              <h5 className="font-bold text-sky-400 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>
+                                1. Tài khoản Quỹ Topstep (TopstepX / Tradovate)
+                              </h5>
+                              <ol className="list-decimal list-inside pl-1 space-y-1.5 text-slate-400">
+                                <li>Đăng nhập vào trang giao dịch <strong>TopstepX</strong> hoặc dashboard Topstep.</li>
+                                <li>Truy cập mục <strong>"Trades"</strong> hoặc tab <strong>"Lịch sử giao dịch"</strong>.</li>
+                                <li>Chọn khoảng thời gian và tài khoản bạn cần lấy lịch sử.</li>
+                                <li>Nhấp chuột vào nút <strong>"Export CSV"</strong> (ở góc phải phía trên bảng lệnh).</li>
+                                <li>Quay lại app này, chọn tệp vừa tải về, hệ thống sẽ tự động nhận dạng cấu trúc Topstep.</li>
+                              </ol>
+                            </div>
+
+                            {/* FTMO guide */}
+                            <div className="space-y-2">
+                              <h5 className="font-bold text-amber-400 flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                2. Tài khoản Quỹ FTMO (Client MetriX)
+                              </h5>
+                              <ol className="list-decimal list-inside pl-1 space-y-1.5 text-slate-400">
+                                <li>Đăng nhập vào <strong>FTMO Client Area</strong> và mở ứng dụng <strong>MetriX</strong> của tài khoản tương ứng.</li>
+                                <li>Kéo xuống phía dưới cùng để tìm phần <strong>"Trading Journal"</strong> (Nhật ký giao dịch).</li>
+                                <li>Ở góc bên phải tiêu đề "Trading Journal", nhấp vào nút <strong>"Export CSV"</strong>.</li>
+                                <li>Nhập tệp này vào hệ thống và chọn preset <strong>"FTMO MetriX CSV 📈"</strong> để hoàn tất đồng bộ.</li>
+                              </ol>
+                            </div>
+                          </div>
+
+                          <div className="bg-indigo-950/20 border border-indigo-900/50 rounded-lg p-3 text-slate-400 text-[10.5px] flex items-start gap-2">
+                            <span className="text-sm leading-none">⚙️</span>
+                            <div>
+                              <strong className="text-indigo-400">Cơ chế đồng bộ an toàn:</strong> Khi bạn nhập tệp CSV, hệ thống sẽ tự động quét và 
+                              <strong> bỏ qua các lệnh đã tồn tại</strong> (trùng thời gian mở/đóng và cặp tiền) để tránh bị nhân đôi lịch sử. 
+                              Đồng thời hệ thống sẽ tự kiểm tra lỗi kỷ luật (ví dụ: không đặt SL) để tự động cập nhật thưởng/phạt.
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Setup step 1: File upload & Account select */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Account selection */}
@@ -4651,9 +5305,29 @@ export default function App() {
                     {/* Setup step 2: Column mapping */}
                     {csvHeaders.length > 0 && (
                       <div className="bg-[#0B1020] border border-slate-800 rounded-xl p-5 space-y-4">
-                        <div className="flex justify-between items-center border-b border-slate-800/80 pb-2">
-                          <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest">Thiết lập ánh xạ cột (Column Mapping)</h4>
-                          <span className="text-[10px] text-slate-500 italic">Hệ thống đã tự động quét và khớp các cột tương thích. Bạn có thể chỉnh sửa lại.</span>
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-800/80 pb-3 gap-3">
+                          <div>
+                            <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-widest">Thiết lập ánh xạ cột (Column Mapping)</h4>
+                            <span className="text-[10px] text-slate-500 italic mt-0.5 block">Hệ thống đã tự động quét và khớp các cột tương thích. Bạn có thể chọn mẫu nền tảng bên dưới.</span>
+                          </div>
+                          
+                          {/* Preset Selector */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400 font-bold uppercase whitespace-nowrap">Mẫu Platform:</span>
+                            <select
+                              value={importPreset}
+                              onChange={(e) => {
+                                const preset = e.target.value;
+                                setImportPreset(preset);
+                                applyImportPreset(preset, csvHeaders);
+                              }}
+                              className="bg-[#121A2B] border border-slate-800 text-slate-350 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold outline-none focus:border-indigo-500 font-sans cursor-pointer"
+                            >
+                              <option value="auto">Tự động phát hiện 🔍</option>
+                              <option value="topstep">Topstep CSV Export 🔵</option>
+                              <option value="ftmo">FTMO MetriX CSV 📈</option>
+                            </select>
+                          </div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                           {[
